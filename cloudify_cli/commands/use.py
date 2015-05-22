@@ -17,51 +17,57 @@
 Handles 'cfy use'
 """
 
-from cloudify_cli.logger import flgr, lgr
-from cloudify_cli.exceptions import CloudifyCliError
-from cloudify_rest_client.exceptions import CloudifyClientError
+from cloudify_rest_client.exceptions import (
+    CloudifyClientError,
+    UserUnauthorizedError
+)
+
+from cloudify_cli import constants
 from cloudify_cli import utils
+from cloudify_cli.bootstrap import bootstrap as bs
+from cloudify_cli.exceptions import CloudifyCliError
+from cloudify_cli.logger import get_logger
 
 
-def use(management_ip, provider):
-    # first check this server is available.
-    client = utils.get_rest_client(management_ip)
+def use(management_ip, rest_port):
+    logger = get_logger()
+    # determine SSL mode by port
+    if rest_port == constants.SECURED_REST_PORT:
+        protocol = constants.SECURED_PROTOCOL
+    else:
+        protocol = constants.DEFAULT_PROTOCOL
+    client = utils.get_rest_client(
+        manager_ip=management_ip, rest_port=rest_port, protocol=protocol)
     try:
-        status_result = client.manager.get_status()
+        # first check this server is available.
+        client.manager.get_status()
+    except UserUnauthorizedError:
+        msg = "Can't use management server {0}: User is unauthorized.".format(
+            management_ip)
+        raise CloudifyCliError(msg)
     except CloudifyClientError:
-        status_result = None
-    if not status_result:
-        msg = ("Can't use management server {0}: No response."
-               .format(management_ip))
+        msg = "Can't use management server {0}: No response.".format(
+            management_ip)
         raise CloudifyCliError(msg)
 
-    try:
-        # check if cloudify was initialized.
-        path = utils.get_context_path()
-        flgr.debug('Cloudify was initialized in {0}. '
-                   'Will use existing context.'
-                   .format(path))
-    except CloudifyCliError:
-        # even if "init" wasn't called prior to this.
-        # Allowing the user to work with an existing management server
-        flgr.debug('Cloudify was not initialized. '
-                   'Creating a new context in {0}'.format(utils.get_cwd()))
-        utils.dump_cloudify_working_dir_settings(
-            utils.CloudifyWorkingDirectorySettings())
+    # check if cloudify was initialized.
+    if not utils.is_initialized():
+        utils.dump_cloudify_working_dir_settings()
+        utils.dump_configuration_file()
 
     try:
-        response = utils.get_rest_client(
-            management_ip).manager.get_context()
-        provider_name = response['name']
+        response = client.manager.get_context()
         provider_context = response['context']
     except CloudifyClientError:
-        provider_name = None
         provider_context = None
 
     with utils.update_wd_settings() as wd_settings:
         wd_settings.set_management_server(management_ip)
         wd_settings.set_provider_context(provider_context)
-        wd_settings.set_provider(provider_name)
-        wd_settings.set_is_provider_config(provider)
-        lgr.info('Using management server {0}'
-                 .format(management_ip))
+        wd_settings.set_rest_port(rest_port)
+        wd_settings.set_protocol(protocol)
+        logger.info('Using management server {0} with port {1}'
+                    .format(management_ip, rest_port))
+
+    # delete the previous manager deployment if exists.
+    bs.delete_workdir()

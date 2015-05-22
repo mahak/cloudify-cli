@@ -28,7 +28,10 @@ WORKFLOW_TASK_RETRY_INTERVAL = 30
 
 POLICY_ENGINE_START_TIMEOUT = 30
 
-REST_PORT = 80
+DEFAULT_REST_PORT = 80
+SECURED_REST_PORT = 443
+DEFAULT_PROTOCOL = 'http'
+SECURED_PROTOCOL = 'https'
 
 CLOUDIFY_PACKAGES_PATH = '/cloudify'
 CLOUDIFY_COMPONENTS_PACKAGE_PATH = '/cloudify-components'
@@ -40,5 +43,20 @@ CLOUDIFY_REST_CLIENT_LOGGER_NAME = 'cloudify.rest_client.http'
 
 IGNORED_LOCAL_WORKFLOW_MODULES = (
     'worker_installer.tasks',
-    'plugin_installer.tasks'
+    'plugin_installer.tasks',
+    'windows_agent_installer.tasks',
+    'windows_plugin_installer.tasks'
 )
+
+CLOUDIFY_AUTHENTICATION_HEADER = 'Authorization'
+CLOUDIFY_USERNAME_ENV = 'CLOUDIFY_USERNAME'
+CLOUDIFY_PASSWORD_ENV = 'CLOUDIFY_PASSWORD'
+
+CLOUDIFY_SSL_CERT = 'CLOUDIFY_SSL_CERT'
+CLOUDIFY_SSL_TRUST_ALL = 'CLOUDIFY_SSL_TRUST_ALL'
+
+SSL_ENABLED_PROPERTY_NAME = 'enabled'
+SSL_CERTIFICATE_PATH_PROPERTY_NAME = 'certificate_path'
+SSL_PRIVATE_KEY_PROPERTY_NAME = 'private_key_path'
+
+BASIC_AUTH_PREFIX = 'Basic'

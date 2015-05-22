@@ -16,11 +16,13 @@
 # flake8: noqa
 
 import argparse
-import json
 
 from cloudify_cli import commands as cfy
 from cloudify_cli.config import completion_utils
 from cloudify_cli.config import argument_utils
+from cloudify_cli.constants import DEFAULT_REST_PORT
+
+FORMAT_INPUT_AS_YAML_OR_DICT = 'formatted as YAML or as "key1=value1;key2=value2"'
 
 
 def blueprint_id_argument():
@@ -96,6 +98,32 @@ def parser_config():
                         'help': 'command for uploading a blueprint to the management server',
                         'handler': cfy.blueprints.upload
                     },
+                    'publish-archive': {
+                        'arguments': {
+                            '-l,--archive-location': {
+                                'metavar': 'ARCHIVE_LOCATION',
+                                'dest': 'archive_location',
+                                'type': str,
+                                'required': True,
+                                'help': "Path or URL to the application's "
+                                        "blueprint archive file",
+                                'completer': completion_utils.archive_files_completer
+                            },
+                            '-n,--blueprint-filename': {
+                                'metavar': 'BLUEPRINT_FILENAME',
+                                'dest': 'blueprint_filename',
+                                'type': str,
+                                'required': False,
+                                'help': "Name of the archive's main blueprint "
+                                        "file",
+                            },
+                            '-b,--blueprint-id': argument_utils.remove_completer(blueprint_id_argument())
+                        },
+                        'help': 'command for publishing a blueprint '
+                                'archive from a path or URL to the '
+                                'management server',
+                        'handler': cfy.blueprints.publish_archive
+                    },
                     'download': {
                         'arguments': {
                             '-b,--blueprint-id': blueprint_id_argument(),
@@ -111,14 +139,15 @@ def parser_config():
                         'handler': cfy.blueprints.download
                     },
                     'list': {
-                        'help': 'command for listing all uploaded blueprints',
+                        'help': 'command for listing all blueprints on the '
+                                'Manager',
                         'handler': cfy.blueprints.ls
                     },
                     'delete': {
                         'arguments': {
                             '-b,--blueprint-id': blueprint_id_argument()
                         },
-                        'help': 'command for deleting an uploaded blueprint',
+                        'help': 'command for deleting a blueprint',
                         'handler': cfy.blueprints.delete
                     },
                     'validate': {
@@ -152,7 +181,8 @@ def parser_config():
                                 'metavar': 'INPUTS',
                                 'dest': 'inputs',
                                 'required': False,
-                                'help': 'Inputs file/string for the deployment creation (in JSON format)'
+                                'help': 'Inputs file/string for the deployment creation ({0})'
+                                        .format(FORMAT_INPUT_AS_YAML_OR_DICT)
                             }
                         },
                         'help': 'command for creating a deployment of a blueprint',
@@ -202,11 +232,17 @@ def parser_config():
                             '-l,--include-logs': {
                                 'dest': 'include_logs',
                                 'action': 'store_true',
-                                'help': 'A flag whether to include logs in returned events'
+                                'help': 'Includes logs in the returned events'
                             },
                             '-e,--execution-id': execution_id_argument(
                                 hlp='The id of the execution to list events for'
-                            )
+                            ),
+                            '--tail': {
+                                'dest': 'tail',
+                                'action': 'store_true',
+                                'default': False,
+                                'help': 'tail the events of the specified execution until it ends'
+                            }
                         },
                         'help': 'Displays Events for different executions',
                         'handler': cfy.events.ls
@@ -244,7 +280,8 @@ def parser_config():
                                 'default': {},
                                 'type': str,
                                 'required': False,
-                                'help': 'Parameters for the workflow execution (in JSON format)'
+                                'help': 'Parameters for the workflow execution ({0})'
+                                        .format(FORMAT_INPUT_AS_YAML_OR_DICT)
                             },
                             '--allow-custom-parameters': {
                                 'dest': 'allow_custom_parameters',
@@ -343,10 +380,50 @@ def parser_config():
                                 'metavar': 'INPUTS',
                                 'dest': 'inputs',
                                 'required': False,
-                                'help': 'Inputs file/string for the local workflow creation (in JSON format)'
+                                'help': 'Inputs file/string for the local workflow creation ({0})'
+                                        .format(FORMAT_INPUT_AS_YAML_OR_DICT)
+                            },
+                            '--install-plugins': {
+                                'dest': 'install_plugins_',
+                                'action': 'store_true',
+                                'default': False,
+                                'help': 'Install necessary plugins of the given blueprint.'
                             }
                         },
                         'handler': cfy.local.init
+                    },
+                    'install-plugins': {
+                        'help': 'Installs the necessary plugins for a given blueprint',
+                        'arguments': {
+                            '-p,--blueprint-path': {
+                                'dest': 'blueprint_path',
+                                'metavar': 'BLUEPRINT_PATH',
+                                'type': str,
+                                'required': True,
+                                'help': 'Path to a blueprint'
+                            }
+                        },
+                        'handler': cfy.local.install_plugins
+                    },
+                    'create-requirements': {
+                        'help': 'Creates a PIP compliant requirements file for the given blueprint',
+                        'arguments': {
+                            '-p,--blueprint-path': {
+                                'dest': 'blueprint_path',
+                                'metavar': 'BLUEPRINT_PATH',
+                                'type': str,
+                                'required': True,
+                                'help': 'Path to a blueprint'
+                            },
+                            '-o,--output': {
+                                'metavar': 'REQUIREMENTS_OUTPUT',
+                                'dest': 'output',
+                                'required': False,
+                                'help': 'Path to a file that will hold the '
+                                        'requirements of the blueprint'
+                            }
+                        },
+                        'handler': cfy.local.create_requirements
                     },
                     'execute': {
                         'help': 'Execute a workflow locally',
@@ -362,7 +439,8 @@ def parser_config():
                                 'default': {},
                                 'type': str,
                                 'required': False,
-                                'help': 'Parameters for the workflow execution (in JSON format)'
+                                'help': 'Parameters for the workflow execution ({0})'
+                                        .format(FORMAT_INPUT_AS_YAML_OR_DICT)
                             },
                             '--allow-custom-parameters': {
                                 'dest': 'allow_custom_parameters',
@@ -467,27 +545,21 @@ def parser_config():
                 'handler': cfy.ssh
             },
             'bootstrap': {
-                'help': 'Bootstrap Cloudify on the currently active provider',
+                'help': 'Bootstrap a Cloudify management environment',
                 'arguments': {
                     '-p,--blueprint-path': {
                         'dest': 'blueprint_path',
                         'metavar': 'BLUEPRINT_PATH',
-                        'default': None,
+                        'required': True,
                         'type': str,
                         'help': 'Path to a manager blueprint'
-                    },
-                    '-c,--config-file': {
-                        'dest': 'config_file_path',
-                        'metavar': 'CONFIG_FILE',
-                        'default': None,
-                        'type': str,
-                        'help': 'Path to a provider configuration file (DEPRECATED: provider api)'
                     },
                     '-i,--inputs': {
                         'metavar': 'INPUTS',
                         'dest': 'inputs',
                         'required': False,
-                        'help': 'Inputs file/string for a manager blueprint (in JSON format)'
+                        'help': 'Inputs file/string for a manager blueprint ({0})'
+                                .format(FORMAT_INPUT_AS_YAML_OR_DICT)
                     },
                     '--keep-up-on-failure': {
                         'dest': 'keep_up',
@@ -506,6 +578,34 @@ def parser_config():
                         'action': 'store_true',
                         'help': 'A flag indicating that validations will run without,'
                                 ' actually performing the bootstrap process.'
+                    },
+                    '--install-plugins': {
+                        'dest': 'install_plugins',
+                        'action': 'store_true',
+                        'default': False,
+                        'help': 'Install necessary plugins of the given blueprint.'
+                    },
+                    '--task-retries': {
+                        'metavar': 'TASK_RETRIES',
+                        'dest': 'task_retries',
+                        'default': 5,
+                        'type': int,
+                        'help': 'How many times should a task be retried in case '
+                                'it fails'
+                    },
+                    '--task-retry-interval': {
+                        'metavar': 'TASK_RETRY_INTERVAL',
+                        'dest': 'task_retry_interval',
+                        'default': 30,
+                        'type': int,
+                        'help': 'How many seconds to wait before each task is retried'
+                    },
+                    '--task-thread-pool-size': {
+                        'metavar': 'TASK_THREAD_POOL_SIZE',
+                        'dest': 'task_thread_pool_size',
+                        'default': 1,
+                        'type': int,
+                        'help': 'The size of the thread pool size to execute tasks in'
                     }
                 },
                 'handler': cfy.bootstrap
@@ -513,24 +613,11 @@ def parser_config():
             'teardown': {
                 'help': 'Teardown Cloudify',
                 'arguments': {
-                    '-c,--config-file': {
-                        'dest': 'config_file_path',
-                        'metavar': 'CONFIG_FILE',
-                        'default': None,
-                        'type': str,
-                        'help': 'Path to a provider configuration file (DEPRECATED: provider api)'
-                    },
                     '--ignore-deployments': {
                         'dest': 'ignore_deployments',
                         'action': 'store_true',
-                        'help': 'A flag indicating confirmation for teardown even if there '
-                                'exist active deployments'
-                    },
-                    '--ignore-validation': {
-                        'dest': 'ignore_validation',
-                        'action': 'store_true',
-                        'help': 'A flag indicating confirmation for teardown even if there '
-                                'are validation conflicts'
+                        'help': 'A flag indicating confirmation for teardown even if deployments'
+                                'exist on the manager'
                     },
                     '-f,--force': {
                         'dest': 'force',
@@ -540,6 +627,42 @@ def parser_config():
                     }
                 },
                 'handler': cfy.teardown
+            },
+            'recover': {
+                'help': 'Performs recovery of the management machine '
+                        'and all its contained nodes.',
+                'arguments': {
+                    '-f,--force': {
+                        'dest': 'force',
+                        'action': 'store_true',
+                        'default': False,
+                        'help': 'A flag indicating confirmation for '
+                                'the recovery request'
+                    },
+                    '--task-retries': {
+                        'metavar': 'TASK_RETRIES',
+                        'dest': 'task_retries',
+                        'default': 5,
+                        'type': int,
+                        'help': 'How many times should a task be retried '
+                                'in case it fails.'
+                    },
+                    '--task-retry-interval': {
+                        'metavar': 'TASK_RETRY_INTERVAL',
+                        'dest': 'task_retry_interval',
+                        'default': 30,
+                        'type': int,
+                        'help': 'How many seconds to wait before each task is retried.'
+                    },
+                    '--task-thread-pool-size': {
+                        'metavar': 'TASK_THREAD_POOL_SIZE',
+                        'dest': 'task_thread_pool_size',
+                        'default': 1,
+                        'type': int,
+                        'help': 'The size of the thread pool size to execute tasks in'
+                    }
+                },
+                'handler': cfy.recover
             },
             'use': {
                 'help': 'Use/switch to the specified management server',
@@ -551,25 +674,18 @@ def parser_config():
                         'dest': 'management_ip',
                         'required': True
                     },
-                    '--provider': {
-                        'help': 'Use deprecated provider api',
-                        'default': False,
-                        'dest': 'provider',
-                        'action': 'store_true'
+                    '--port': {
+                        'help': 'Specify the rest server port',
+                        'default': DEFAULT_REST_PORT,
+                        'type': int,
+                        'dest': 'rest_port'
                     }
                 },
                 'handler': cfy.use
             },
             'init': {
-                'help': 'Initialize configuration files for a specific cloud provider',
+                'help': 'Initialize cfy work environment',
                 'arguments': {
-                    '-p,--provider': {
-                        'metavar': 'PROVIDER',
-                        'type': str,
-                        'dest': 'provider',
-                        'help': 'Command for initializing configuration files for a'
-                                ' specific provider'
-                    },
                     '-r,--reset-config': {
                         'dest': 'reset_config',
                         'action': 'store_true',

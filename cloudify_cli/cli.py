@@ -14,26 +14,24 @@
 # limitations under the License.
 ############
 
+import StringIO
 import argparse
-import logging
 import sys
 import traceback
 import argcomplete
+import logging
 
 from cloudify_rest_client.exceptions import CloudifyClientError
 
-from cloudify_cli.constants import CLOUDIFY_REST_CLIENT_LOGGER_NAME
-from cloudify_cli.exceptions import CloudifyCliError
-from cloudify_cli.exceptions import CloudifyValidationError
 from cloudify_cli.exceptions import SuppressedCloudifyCliError
 from cloudify_cli.exceptions import CloudifyBootstrapError
-from cloudify_cli.logger import set_logger_handlers
 
-output_level = logging.INFO
+
 verbose_output = False
 
 
 def main():
+    _configure_loggers()
     _set_cli_except_hook()
     args = _parse_args(sys.argv[1:])
     args.handler(args)
@@ -53,6 +51,9 @@ def _parse_args(args):
     argcomplete.autocomplete(parser)
     parsed = parser.parse_args(args)
     set_global_verbosity_level(parsed.verbosity)
+    if parsed.debug:
+        set_debug()
+        set_global_verbosity_level(True)
     return parsed
 
 
@@ -60,7 +61,6 @@ def register_commands():
 
     from cloudify_cli.config.parser_config import parser_config
     parser_conf = parser_config()
-
     parser = argparse.ArgumentParser(description=parser_conf['description'])
 
     # Direct arguments for the 'cfy' command (like -v)
@@ -68,7 +68,6 @@ def register_commands():
         parser.add_argument(argument_name, **argument)
 
     subparsers = parser.add_subparsers()
-
     for command_name, command in parser_conf['commands'].iteritems():
 
         if 'sub_commands' in command:
@@ -124,6 +123,14 @@ def register_command(subparsers, command_name, command):
         help='A flag for setting verbose output'
     )
 
+    # Add debug flag for each command
+    command_parser.add_argument(
+        '--debug',
+        dest='debug',
+        action='store_true',
+        help='A flag for setting debug output'
+    )
+
     def command_cmd_handler(args):
         kwargs = {}
         for arg_name in command_arg_names:
@@ -138,68 +145,104 @@ def register_command(subparsers, command_name, command):
     command_parser.set_defaults(handler=command_cmd_handler)
 
 
-def set_global_verbosity_level(is_verbose_output):
-    """
-    sets the global verbosity level for console and the lgr logger.
+def set_global_verbosity_level(verbose):
 
-    :param bool is_verbose_output: should be output be verbose
-    :rtype: `None`
     """
-    # we need both lgr.setLevel and the verbose_output parameter
-    # since not all output is generated at the logger level.
-    # verbose_output can help us control that.
+    Sets the global verbosity level.
+
+    :param bool verbose: verbose output or not.
+    """
+
     global verbose_output
-    global output_level
-    from cloudify_cli.logger import lgr
+    verbose_output = verbose
 
-    verbose_output = is_verbose_output
-    if verbose_output:
-        set_logger_handlers(CLOUDIFY_REST_CLIENT_LOGGER_NAME, logging.DEBUG)
-        output_level = logging.DEBUG
-        lgr.setLevel(logging.DEBUG)
-    else:
-        output_level = logging.INFO
-        lgr.setLevel(logging.INFO)
+
+def set_debug():
+
+    """
+    Sets all previously configured
+    loggers to debug level
+
+    """
+
+    from cloudify_cli.logger import all_loggers
+    for logger_name in all_loggers():
+        logging.getLogger(logger_name)\
+            .setLevel(logging.DEBUG)
 
 
 def get_global_verbosity():
+
     """
     Returns the globally set verbosity
-    :return:
+
+    :return: verbose or not
+    :rtype: bool
     """
     global verbose_output
     return verbose_output
 
 
+def _configure_loggers():
+    from cloudify_cli import logger
+    logger.configure_loggers()
+
+
 def _set_cli_except_hook():
 
+    def recommend(possible_solutions):
+
+        from cloudify_cli.logger import get_logger
+        logger = get_logger()
+
+        logger.info('Possible solutions:')
+        for solution in possible_solutions:
+            logger.info('  - {0}'.format(solution))
+
     def new_excepthook(tpe, value, tb):
-        prefix = ''
+
+        from cloudify_cli.logger import get_logger
+        logger = get_logger()
+
+        prefix = None
         server_traceback = None
         output_message = True
-        output_traceback = output_level <= logging.DEBUG
         if issubclass(tpe, CloudifyClientError):
-            prefix = 'Failed making a call to REST service: '
             server_traceback = value.server_traceback
-        elif tpe in [CloudifyCliError, CloudifyValidationError]:
-            pass
-        elif tpe in [SuppressedCloudifyCliError, CloudifyBootstrapError]:
+            # this means we made a server call and it failed.
+            # we should include this information in the error
+            prefix = 'An error occurred on the server'
+        if issubclass(tpe, SuppressedCloudifyCliError):
             output_message = False
-        else:
-            prefix = '{}: '.format(tpe.__name__)
-        if output_traceback:
-            print("Traceback (most recent call last):")
-            traceback.print_tb(tb)
+        if issubclass(tpe, CloudifyBootstrapError):
+            output_message = False
+        if verbose_output:
+            # print traceback if verbose
+            s_traceback = StringIO.StringIO()
+            traceback.print_exception(
+                etype=tpe,
+                value=value,
+                tb=tb,
+                file=s_traceback)
+            logger.error(s_traceback.getvalue())
             if server_traceback:
-                print("Server Traceback (most recent call last):")
+                logger.error('Server Traceback (most recent call last):')
+
                 # No need for print_tb since this exception
                 # is already formatted by the server
-                print server_traceback
-        if output_message:
-            from cloudify_cli.logger import lgr
-            from cloudify_cli.logger import flgr
-            lgr.error('{}{}'.format(prefix, value))
-            flgr.error('{}{}'.format(prefix, value))
+                logger.error(server_traceback)
+        if output_message and not verbose_output:
+
+            # if we output the traceback
+            # we output the message too.
+            # print_exception does that.
+            # here we just want the message (non verbose)
+            if prefix:
+                logger.error('{0}: {1}'.format(prefix, value))
+            else:
+                logger.error(value)
+        if hasattr(value, 'possible_solutions'):
+            recommend(getattr(value, 'possible_solutions'))
 
     sys.excepthook = new_excepthook
 

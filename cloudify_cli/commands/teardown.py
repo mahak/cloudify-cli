@@ -17,16 +17,15 @@
 Handles 'cfy teardown'
 """
 
-import shutil
-
-from cloudify_cli import provider_common
 from cloudify_cli import utils
 from cloudify_cli import exceptions
 from cloudify_cli.bootstrap import bootstrap as bs
-from cloudify_cli.logger import lgr
+from cloudify_cli.logger import get_logger
+from cloudify_cli.commands.use import use
 
 
-def teardown(force, ignore_deployments, config_file_path, ignore_validation):
+def teardown(force, ignore_deployments):
+    logger = get_logger()
     management_ip = utils.get_management_server_ip()
     if not force:
         msg = ("This action requires additional "
@@ -36,29 +35,48 @@ def teardown(force, ignore_deployments, config_file_path, ignore_validation):
         raise exceptions.CloudifyCliError(msg)
 
     client = utils.get_rest_client(management_ip)
-    if not ignore_deployments and len(client.deployments.list()) > 0:
-        msg = ("Management server {0} has active deployments. Add the "
-               "'--ignore-deployments' flag to your command to ignore "
-               "these deployments and execute topology teardown."
-               .format(management_ip))
+    try:
+        if not ignore_deployments and len(client.deployments.list()) > 0:
+            msg = \
+                ("Manager server {0} has existing deployments. Delete all "
+                 "deployments first or add the '--ignore-deployments' flag to "
+                 "your command to ignore these deployments and execute "
+                 "teardown.".format(management_ip))
+            raise exceptions.CloudifyCliError(msg)
+    except IOError:
+        msg = \
+            "Failed querying manager server {0} about existing " \
+            "deployments; The Manager server may be down. If you wish to " \
+            'skip this check, you may use the "--ignore-deployments" flag, ' \
+            'in which case teardown will occur regardless of the Manager ' \
+            "server's status.".format(management_ip)
         raise exceptions.CloudifyCliError(msg)
 
-    settings = utils.load_cloudify_working_dir_settings()
-    if settings.get_is_provider_config():
-        provider_common.provider_teardown(config_file_path, ignore_validation)
-    else:
-        bs.teardown(name='manager',
-                    task_retries=0,
-                    task_retry_interval=0,
-                    task_thread_pool_size=1)
+    logger.info("tearing down {0}".format(management_ip))
 
-        # deleting local environment data
-        workdir = utils.get_bootstrap_dir_path()
-        shutil.rmtree(workdir)
+    # runtime properties might have changed since the last time we
+    # executed 'use', because of recovery. so we need to retrieve
+    # the provider context again
+    try:
+        logger.info('Retrieving provider context')
+        management_ip = utils.get_management_server_ip()
+        use(management_ip, utils.get_rest_port())
+    except BaseException as e:
+        logger.warning('Failed retrieving provider context: {0}. This '
+                       'may cause a leaking management server '
+                       'in case it has gone through a '
+                       'recovery process'.format(str(e)))
+
+    # reload settings since the provider context maybe changed
+    settings = utils.load_cloudify_working_dir_settings()
+    provider_context = settings.get_provider_context()
+    bs.read_manager_deployment_dump_if_needed(
+        provider_context.get('cloudify', {}).get('manager_deployment'))
+    bs.teardown()
 
     # cleaning relevant data from working directory settings
     with utils.update_wd_settings() as wd_settings:
         # wd_settings.set_provider_context(provider_context)
         wd_settings.remove_management_server_context()
 
-    lgr.info("teardown complete")
+    logger.info("teardown complete")

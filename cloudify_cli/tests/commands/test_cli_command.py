@@ -17,20 +17,22 @@
 import os
 import shutil
 import unittest
-import sys
+from mock import patch
 
-from cloudify_cli.config.logger_config import LOG_DIR
-from cloudify_cli.exceptions import CloudifyCliError
-from cloudify_cli.tests import cli_runner
-from cloudify_cli import utils
 from cloudify_rest_client import CloudifyClient
 from cloudify_rest_client.exceptions import CloudifyClientError
+from cloudify.utils import setup_logger
+
+
+from cloudify_cli import exceptions
+from cloudify_cli.tests import cli_runner
+from cloudify_cli import utils
 from cloudify_cli.utils import os as utils_os
+from cloudify_cli.utils import DEFAULT_LOG_FILE
 
 
 TEST_DIR = '/tmp/cloudify-cli-component-tests'
 TEST_WORK_DIR = TEST_DIR + "/cloudify"
-TEST_PROVIDERS_DIR = TEST_DIR + "/mock-providers"
 THIS_DIR = os.path.dirname(os.path.dirname(__file__))
 BLUEPRINTS_DIR = os.path.join(THIS_DIR, 'resources', 'blueprints')
 
@@ -39,67 +41,97 @@ class CliCommandTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # copy provider to provider directory
-        # this creates the directory as well
-        shutil.copytree('{0}/resources/providers/mock_provider/'
-                        .format(THIS_DIR), TEST_PROVIDERS_DIR)
-        shutil.copy(
-            '{0}/resources/providers/mock_provider_with_cloudify_prefix'
-            '/cloudify_mock_provider_with_cloudify_prefix.py'
-            .format(THIS_DIR), TEST_PROVIDERS_DIR
-        )
-
-        # append providers to path
-        # so that its importable
-        sys.path.append(TEST_PROVIDERS_DIR)
+        cls.logger = setup_logger('CliCommandTest')
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(TEST_DIR)
 
     def setUp(self):
+        logdir = os.path.dirname(DEFAULT_LOG_FILE)
 
         # create log folder
-        if not os.path.exists(LOG_DIR):
-            os.makedirs(LOG_DIR)
+        if not os.path.exists(logdir):
+            os.makedirs(logdir)
 
         # create test working directory
         if not os.path.exists(TEST_WORK_DIR):
             os.makedirs(TEST_WORK_DIR)
 
         self.client = CloudifyClient()
-        utils.get_rest_client = lambda x: self.client
+
+        def get_mock_rest_client(
+                manager_ip=None, rest_port=None, protocol=None):
+            return self.client
+
+        self.original_utils_get_rest_client = utils.get_rest_client
+        utils.get_rest_client = get_mock_rest_client
+        self.original_utils_get_cwd = utils.get_cwd
         utils.get_cwd = lambda: TEST_WORK_DIR
+        self.original_utils_os_getcwd = utils_os.getcwd
         utils_os.getcwd = lambda: TEST_WORK_DIR
 
     def tearDown(self):
 
+        # remove mocks
+        utils.get_rest_client = self.original_utils_get_rest_client
+        utils.get_cwd = self.original_utils_get_cwd = utils.get_cwd
+        utils_os.getcwd = self.original_utils_os_getcwd = utils_os.getcwd
+
         # empty log file
-        from cloudify_cli.config.logger_config import LOGGER
-        logfile = LOGGER['handlers']['file']['filename']
-        if os.path.exists(logfile):
-            with open(logfile, 'w') as f:
+        if os.path.exists(DEFAULT_LOG_FILE):
+            with open(DEFAULT_LOG_FILE, 'w') as f:
                 f.write('')
 
         # delete test working directory
         if os.path.exists(TEST_WORK_DIR):
             shutil.rmtree(TEST_WORK_DIR)
 
-    def _assert_ex(self, cli_cmd, err_str_segment):
+    def _assert_ex(self,
+                   cli_cmd,
+                   err_str_segment,
+                   possible_solutions=None):
+
+        def _assert():
+            self.assertIn(err_str_segment, str(ex))
+            if possible_solutions:
+                if hasattr(ex, 'possible_solutions'):
+                    self.assertEqual(ex.possible_solutions,
+                                     possible_solutions)
+                else:
+                    self.fail('Exception should have '
+                              'declared possible solutions')
+
         try:
             cli_runner.run_cli(cli_cmd)
             self.fail('Expected error {0} was not raised for command {1}'
                       .format(err_str_segment, cli_cmd))
         except SystemExit, ex:
-            self.assertIn(err_str_segment, str(ex))
-        except CloudifyCliError, ex:
-            self.assertIn(err_str_segment, str(ex))
+            _assert()
+        except exceptions.CloudifyCliError, ex:
+            _assert()
+        except exceptions.CloudifyValidationError, ex:
+            _assert()
         except CloudifyClientError, ex:
-            self.assertIn(err_str_segment, str(ex))
+            _assert()
         except ValueError, ex:
-            self.assertIn(err_str_segment, str(ex))
+            _assert()
         except IOError, ex:
-            self.assertIn(err_str_segment, str(ex))
+            _assert()
+        except ImportError as ex:
+            _assert()
+
+    def assert_method_called(self,
+                             cli_command,
+                             module,
+                             function_name,
+                             kwargs):
+        with patch.object(module, function_name) as mock:
+            try:
+                cli_runner.run_cli(cli_command)
+            except BaseException as e:
+                self.logger.info(e.message)
+            mock.assert_called_with(**kwargs)
 
     def _create_cosmo_wd_settings(self, settings=None):
         directory_settings = utils.CloudifyWorkingDirectorySettings()
@@ -107,6 +139,7 @@ class CliCommandTest(unittest.TestCase):
         utils.delete_cloudify_working_dir_settings()
         utils.dump_cloudify_working_dir_settings(
             settings or directory_settings, update=False)
+        utils.dump_configuration_file()
 
     def _read_cosmo_wd_settings(self):
         return utils.load_cloudify_working_dir_settings()

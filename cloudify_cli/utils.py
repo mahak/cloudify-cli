@@ -5,7 +5,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,30 +16,29 @@
 
 import json
 import os
-import imp
 import pkgutil
 import sys
-import yaml
-
+import tempfile
+import getpass
 from contextlib import contextmanager
-from copy import deepcopy
+
+import yaml
+import pkg_resources
+from jinja2.environment import Template
 from prettytable import PrettyTable
-from cloudify_cli.logger import lgr
-from cloudify_cli.logger import flgr
+from itsdangerous import base64_encode
+
 from cloudify_rest_client import CloudifyClient
-from cloudify_cli.constants import REST_PORT
-from cloudify_cli.constants import CLOUDIFY_WD_SETTINGS_FILE_NAME
-from cloudify_cli.constants import CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME
-from cloudify_cli.constants import CONFIG_FILE_NAME
-from cloudify_cli.constants import DEFAULTS_CONFIG_FILE_NAME
+
+import cloudify_cli
+from cloudify_cli import constants
 from cloudify_cli.exceptions import CloudifyCliError
+from cloudify_cli.logger import get_logger
 
-
-class ProviderConfig(dict):
-
-    @property
-    def resources_prefix(self):
-        return self.get('cloudify', {}).get('resources_prefix', '')
+DEFAULT_LOG_FILE = os.path.expanduser(
+    '{0}/cloudify-{1}/cloudify-cli.log'
+    .format(tempfile.gettempdir(),
+            getpass.getuser()))
 
 
 def get_management_user():
@@ -50,20 +49,25 @@ def get_management_user():
     raise CloudifyCliError(msg)
 
 
+def dump_to_file(collection, file_path):
+    with open(file_path, 'a') as f:
+        f.write(os.linesep.join(collection))
+        f.write(os.linesep)
+
+
+def is_virtual_env():
+    return hasattr(sys, 'real_prefix')
+
+
 def load_cloudify_working_dir_settings(suppress_error=False):
     try:
         path = get_context_path()
         with open(path, 'r') as f:
             return yaml.load(f.read())
-    except CloudifyCliError as e:
+    except CloudifyCliError:
         if suppress_error:
             return None
-        msg = ('You must first initialize by running the '
-               'command "cfy init", or choose to work with '
-               'an existing management server by running the '
-               'command "cfy use".')
-        full_message = '{0}. {1}'.format(e.message, msg)
-        raise CloudifyCliError(full_message)
+        raise
 
 
 def get_management_key():
@@ -74,64 +78,129 @@ def get_management_key():
     raise CloudifyCliError(msg)
 
 
+def raise_uninitialized():
+    error = CloudifyCliError(
+        'Not initialized: Cannot find {0} in {1}, '
+        'or in any of its parent directories'
+        .format(constants.CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
+                get_cwd()))
+    error.possible_solutions = [
+        "Run 'cfy init' in this directory"
+    ]
+    raise error
+
+
 def get_context_path():
-    context_path = os.path.join(get_init_path(),
-                                CLOUDIFY_WD_SETTINGS_FILE_NAME)
+    init_path = get_init_path()
+    if init_path is None:
+        raise_uninitialized()
+    context_path = os.path.join(
+        init_path,
+        constants.CLOUDIFY_WD_SETTINGS_FILE_NAME
+    )
     if not os.path.exists(context_path):
-        raise CloudifyCliError('File {0} does not exist'
-                               .format(context_path))
+        raise CloudifyCliError(
+            'File {0} does not exist'
+            .format(context_path)
+        )
     return context_path
 
 
-def json_to_dict(json_resource, json_resource_name):
-    if not json_resource:
+def inputs_to_dict(resource, resource_name):
+    if not resource:
         return None
     try:
-        if os.path.exists(json_resource):
-            with open(json_resource, 'r') as f:
-                return json.loads(f.read())
-        else:
-            return json.loads(json_resource)
-    except ValueError, e:
-        msg = ("'{0}' must be a valid JSON. {1}"
-               .format(json_resource_name, str(e)))
+        # parse resource as string representation of a dictionary
+        parsed_dict = plain_string_to_dict(resource)
+    except CloudifyCliError:
+        try:
+            # if resource is a path - parse as a yaml file
+            if os.path.exists(resource):
+                with open(resource, 'r') as f:
+                    parsed_dict = yaml.load(f.read())
+            else:
+                # parse resource content as yaml
+                parsed_dict = yaml.load(resource)
+        except yaml.error.YAMLError as e:
+            msg = ("'{0}' is not a valid YAML. {1}"
+                   .format(resource_name, str(e)))
+            raise CloudifyCliError(msg)
+
+    if isinstance(parsed_dict, dict):
+        return parsed_dict
+    else:
+        msg = "Invalid input: {0}. {1} must represent a dictionary. Valid " \
+              "values can either be a path to a YAML file, a string " \
+              "formatted as YAML or a string formatted as " \
+              "key1=value1;key2=value2" \
+            .format(resource, resource_name)
         raise CloudifyCliError(msg)
 
 
+def plain_string_to_dict(input_string):
+    input_string = input_string.strip()
+    input_dict = {}
+    mapped_inputs = input_string.split(';')
+    for mapped_input in mapped_inputs:
+        mapped_input = mapped_input.strip()
+        if not mapped_input:
+            continue
+        split_mapping = mapped_input.split('=')
+        if len(split_mapping) == 2:
+            key = split_mapping[0].strip()
+            value = split_mapping[1].strip()
+            input_dict[key] = value
+        else:
+            msg = "Invalid input format: {0}, the expected format is: " \
+                  "key1=value1;key2=value2".format(input_string)
+            raise CloudifyCliError(msg)
+
+    return input_dict
+
+
+def is_initialized():
+    return get_init_path() is not None
+
+
 def get_init_path():
-
-    flgr.debug('Looking up {0}'.format(CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME))
     current_lookup_dir = get_cwd()
-
-    found = False
-    while not found:
+    while True:
 
         path = os.path.join(current_lookup_dir,
-                            CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME)
+                            constants.CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME)
 
         if os.path.exists(path):
             return path
         else:
-            flgr.debug('{0} not found in {1}'
-                       .format(CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
-                               current_lookup_dir))
             if os.path.dirname(current_lookup_dir) == current_lookup_dir:
-                raise CloudifyCliError(
-                    'Cannot find {0} in {1}, '
-                    'or in any of its parent directories'
-                    .format(CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
-                            get_cwd()))
+                return None
             current_lookup_dir = os.path.dirname(current_lookup_dir)
 
 
-def get_bootstrap_dir_path():
-    cloudify_dir = get_init_path()
-    workdir = os.path.join(cloudify_dir, 'bootstrap')
-    return workdir
+def get_configuration_path():
+    dot_cloudify = get_init_path()
+    return os.path.join(
+        dot_cloudify,
+        'config.yaml'
+    )
 
 
-def dump_cloudify_working_dir_settings(cosmo_wd_settings, update=False):
+def dump_configuration_file():
+    config = pkg_resources.resource_string(
+        cloudify_cli.__name__,
+        'resources/config.yaml')
 
+    template = Template(config)
+    rendered = template.render(log_path=DEFAULT_LOG_FILE)
+    target_config_path = get_configuration_path()
+    with open(os.path.join(target_config_path), 'w') as f:
+        f.write(rendered)
+        f.write(os.linesep)
+
+
+def dump_cloudify_working_dir_settings(cosmo_wd_settings=None, update=False):
+    if cosmo_wd_settings is None:
+        cosmo_wd_settings = CloudifyWorkingDirectorySettings()
     if update:
         # locate existing file
         # this will raise an error if the file doesnt exist.
@@ -140,19 +209,14 @@ def dump_cloudify_working_dir_settings(cosmo_wd_settings, update=False):
 
         # create a new file
         path = os.path.join(get_cwd(),
-                            CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME)
-        flgr.debug('Creating {0} in {1}'
-                   .format(CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
-                           get_cwd()))
+                            constants.CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME)
         if not os.path.exists(path):
             os.mkdir(path)
-        target_file_path = os.path.join(get_cwd(),
-                                        CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
-                                        CLOUDIFY_WD_SETTINGS_FILE_NAME)
+        target_file_path = os.path.join(
+            get_cwd(), constants.CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
+            constants.CLOUDIFY_WD_SETTINGS_FILE_NAME)
 
     with open(target_file_path, 'w') as f:
-        flgr.debug('Writing context to {0}'
-                   .format(target_file_path))
         f.write(yaml.dump(cosmo_wd_settings))
 
 
@@ -167,12 +231,53 @@ def get_cwd():
     return os.getcwd()
 
 
-def get_rest_client(manager_ip, rest_port=REST_PORT):
-    return CloudifyClient(manager_ip, rest_port)
+def get_rest_client(manager_ip=None, rest_port=None, protocol=None):
+    if not manager_ip:
+        manager_ip = get_management_server_ip()
+
+    if not rest_port:
+        rest_port = get_rest_port()
+
+    if not protocol:
+        protocol = get_protocol()
+
+    username = get_username()
+
+    password = get_password()
+
+    headers = get_auth_header(username, password)
+
+    cert = get_ssl_cert()
+
+    trust_all = get_ssl_trust_all()
+
+    return CloudifyClient(host=manager_ip, port=rest_port, protocol=protocol,
+                          headers=headers, cert=cert, trust_all=trust_all)
+
+
+def get_auth_header(username, password):
+    header = None
+
+    if username and password:
+        credentials = '{0}:{1}'.format(username, password)
+        header = {
+            constants.CLOUDIFY_AUTHENTICATION_HEADER:
+                constants.BASIC_AUTH_PREFIX + ' ' + base64_encode(credentials)}
+
+    return header
+
+
+def get_rest_port():
+    cosmo_wd_settings = load_cloudify_working_dir_settings()
+    return cosmo_wd_settings.get_rest_port()
+
+
+def get_protocol():
+    cosmo_wd_settings = load_cloudify_working_dir_settings()
+    return cosmo_wd_settings.get_protocol()
 
 
 def get_management_server_ip():
-
     cosmo_wd_settings = load_cloudify_working_dir_settings()
     management_ip = cosmo_wd_settings.get_management_server()
     if management_ip:
@@ -184,8 +289,27 @@ def get_management_server_ip():
     raise CloudifyCliError(msg)
 
 
+def get_username():
+    return os.environ.get(constants.CLOUDIFY_USERNAME_ENV)
+
+
+def get_password():
+    return os.environ.get(constants.CLOUDIFY_PASSWORD_ENV)
+
+
+def get_ssl_cert():
+    return os.environ.get(constants.CLOUDIFY_SSL_CERT)
+
+
+def get_ssl_trust_all():
+    trust_all = os.environ.get(constants.CLOUDIFY_SSL_TRUST_ALL)
+    if trust_all is not None and len(trust_all) > 0:
+        return True
+    return False
+
+
 def print_table(title, tb):
-    lgr.info('{0}{1}{0}{2}{0}'.format(os.linesep, title, tb))
+    get_logger().info('{0}{1}{0}{2}{0}'.format(os.linesep, title, tb))
 
 
 def decode_list(data):
@@ -225,98 +349,6 @@ def print_workflows(workflows, deployment):
     print_table('Workflows:', pt)
 
 
-def get_provider():
-    cosmo_wd_settings = load_cloudify_working_dir_settings()
-    if cosmo_wd_settings.get_provider():
-        return cosmo_wd_settings.get_provider()
-    msg = 'Provider is not set in working directory settings'
-    raise RuntimeError(msg)
-
-
-def get_provider_module(provider_name):
-    try:
-        module_or_pkg_desc = imp.find_module(provider_name)
-        if not module_or_pkg_desc[1]:
-            # module_or_pkg_desc[1] is the pathname of found module/package,
-            # if it's empty none were found
-            msg = ('Provider {0} not found.'.format(provider_name))
-            raise CloudifyCliError(msg)
-
-        module = imp.load_module(provider_name, *module_or_pkg_desc)
-
-        if not module_or_pkg_desc[0]:
-            # module_or_pkg_desc[0] is None and module_or_pkg_desc[1] is not
-            # empty only when we've loaded a package rather than a module.
-            # Re-searching for the module inside the now-loaded package
-            # with the same name.
-            module = imp.load_module(
-                provider_name,
-                *imp.find_module(provider_name, module.__path__))
-        return module
-    except ImportError:
-        msg = ('Could not import module {0}. '
-               'maybe {0} provider module was not installed?'
-               .format(provider_name))
-        raise CloudifyCliError(msg)
-
-
-def read_config(config_file_path, provider_dir):
-
-    def _deep_merge_dictionaries(overriding_dict, overridden_dict):
-        merged_dict = deepcopy(overridden_dict)
-        for k, v in overriding_dict.iteritems():
-            if k in merged_dict and isinstance(v, dict):
-                if isinstance(merged_dict[k], dict):
-                    merged_dict[k] = \
-                        _deep_merge_dictionaries(v, merged_dict[k])
-                else:
-                    raise RuntimeError('type conflict at key {0}'.format(k))
-            else:
-                merged_dict[k] = deepcopy(v)
-        return merged_dict
-
-    if not config_file_path:
-        config_file_path = CONFIG_FILE_NAME
-    defaults_config_file_path = os.path.join(
-        provider_dir,
-        DEFAULTS_CONFIG_FILE_NAME)
-
-    config_file_path = os.path.join(get_cwd(), config_file_path)
-    if not os.path.exists(config_file_path) or not os.path.exists(
-            defaults_config_file_path):
-        if not os.path.exists(defaults_config_file_path):
-            raise ValueError('Defaults configuration file missing; '
-                             'expected to find it at {0}'
-                             .format(defaults_config_file_path))
-        raise ValueError('Configuration file missing; expected to find '
-                         'it at {0}'.format(config_file_path))
-
-    lgr.debug('reading provider config files')
-    with open(config_file_path, 'r') as config_file, \
-            open(defaults_config_file_path, 'r') as defaults_config_file:
-
-        lgr.debug('safe loading user config')
-        user_config = yaml.safe_load(config_file.read())
-
-        lgr.debug('safe loading default config')
-        defaults_config = yaml.safe_load(defaults_config_file.read())
-
-    lgr.debug('merging configs')
-    merged_config = _deep_merge_dictionaries(user_config, defaults_config) \
-        if user_config else defaults_config
-    return ProviderConfig(merged_config)
-
-
-@contextmanager
-def protected_provider_call():
-    try:
-        yield
-    except Exception, ex:
-        trace = sys.exc_info()[2]
-        msg = 'Exception occurred in provider: {0}'.format(str(ex))
-        raise CloudifyCliError(msg), None, trace
-
-
 def get_version():
     version_data = get_version_data()
     return version_data['version']
@@ -328,7 +360,6 @@ def get_version_data():
 
 
 def table(cols, data, defaults=None):
-
     """
     Return a new PrettyTable instance representing the list.
 
@@ -368,10 +399,9 @@ class CloudifyWorkingDirectorySettings(yaml.YAMLObject):
         self._management_ip = None
         self._management_key = None
         self._management_user = None
-        self._provider = None
         self._provider_context = None
-        self._mgmt_aliases = {}
-        self._is_provider_config = False
+        self._rest_port = constants.DEFAULT_REST_PORT
+        self._protocol = constants.DEFAULT_PROTOCOL
 
     def get_management_server(self):
         return self._management_ip
@@ -400,22 +430,22 @@ class CloudifyWorkingDirectorySettings(yaml.YAMLObject):
     def remove_management_server_context(self):
         self._management_ip = None
 
-    def get_provider(self):
-        return self._provider
+    def get_rest_port(self):
+        return self._rest_port
 
-    def set_provider(self, provider):
-        self._provider = provider
+    def set_rest_port(self, rest_port):
+        self._rest_port = rest_port
 
-    def get_is_provider_config(self):
-        return self._is_provider_config
+    def get_protocol(self):
+        return self._protocol
 
-    def set_is_provider_config(self, is_provider_config):
-        self._is_provider_config = is_provider_config
+    def set_protocol(self, protocol):
+        self._protocol = protocol
 
 
 def delete_cloudify_working_dir_settings():
-    target_file_path = os.path.join(get_cwd(),
-                                    CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
-                                    CLOUDIFY_WD_SETTINGS_FILE_NAME)
+    target_file_path = os.path.join(
+        get_cwd(), constants.CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
+        constants.CLOUDIFY_WD_SETTINGS_FILE_NAME)
     if os.path.exists(target_file_path):
         os.remove(target_file_path)
