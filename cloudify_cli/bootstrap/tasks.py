@@ -40,6 +40,7 @@ MANAGER_USER_RUNTIME_PROPERTY = 'manager_user'
 MANAGER_KEY_PATH_RUNTIME_PROPERTY = 'manager_key_path'
 DEFAULT_REMOTE_AGENT_KEY_PATH = '~/.ssh/agent_key.pem'
 REST_PORT = 'rest_port'
+API_VERSION = 'v2'
 
 HOST_CLOUDIFY_HOME_DIR = '~/cloudify'
 HOST_SSL_CERTIFICATE_PATH = '~/cloudify/server.crt'
@@ -57,7 +58,6 @@ RHEL7X = ('redhat', 'Maipo')
 RHEL6X = ('redhat', 'Santiago')
 CENTOS7X = ('centos', 'Core')
 CENTOS6X = ('centos', 'Final')
-UBUNTU14X = ('Ubuntu', 'trusty')
 
 lgr = None
 
@@ -170,13 +170,9 @@ def _install_docker_if_required(docker_path, use_sudo,
                 _run_command('{0} curl -o /usr/bin/docker https://get.docker'
                              '.com/builds/Linux/x86_64/docker-latest'
                              .format(sudo))
-            elif current_distro == UBUNTU14X:
-                # install docker on ubuntu 14.x
-                _run_command('curl -sSL https://get.docker.com/ubuntu | {0} sh'
-                             .format(sudo))
             else:
                 # use the Docker easy install script that applies to multiple
-                # distributions including centos 7.x
+                # distributions including centos 7.x and ubuntu 14.04
                 _run_command('curl -sSL https://get.docker.com/ | {0} sh'
                              .format(sudo))
 
@@ -458,7 +454,11 @@ def recover_docker(docker_path=None, use_sudo=True,
     lgr.info('waiting for cloudify management services to restart')
     port = ctx.instance.runtime_properties[REST_PORT]
     started = _wait_for_management(manager_ip, timeout=180, port=port)
-    _recover_deployments(docker_path, use_sudo)
+
+    cloudify_config = ctx.node.properties['cloudify']
+    if not cloudify_config.get('transient_deployment_workers'):
+        _recover_deployments(docker_path, use_sudo)
+
     if not started:
         err = 'failed waiting for cloudify management services to restart.'
         lgr.info(err)
@@ -577,7 +577,8 @@ def _wait_for_management(ip, timeout, port=constants.DEFAULT_REST_PORT):
         :return: True of False
     """
     protocol = 'http' if port == constants.DEFAULT_REST_PORT else 'https'
-    validation_url = '{0}://{1}:{2}/version'.format(protocol, ip, port)
+    validation_url = '{0}://{1}:{2}/{3}/version'.format(protocol, ip, port,
+                                                        API_VERSION)
     lgr.info('waiting for url {0} to become available'.format(validation_url))
 
     end = time() + timeout
@@ -719,9 +720,9 @@ def _upload_provider_context(remote_agents_private_key_path,
                    remote_provider_context_file)
 
     upload_provider_context_cmd = \
-        'curl --fail -XPOST localhost:8101/provider/context -H ' \
-        '"Content-Type: application/json" -d @{0}'.format(
-            container_provider_context_file)
+        'curl --fail -XPOST localhost:8101/{0}/provider/context -H ' \
+        '"Content-Type: application/json" -d @{1}'.format(
+            API_VERSION, container_provider_context_file)
 
     # uploading the provider context to the REST service
     _run_command_in_cfy(upload_provider_context_cmd, terminal=True)
