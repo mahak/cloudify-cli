@@ -20,8 +20,11 @@ import pkgutil
 import sys
 import tempfile
 import getpass
+import shutil
+import string
+import random
+import errno
 from contextlib import contextmanager
-
 
 import yaml
 import pkg_resources
@@ -31,6 +34,7 @@ from itsdangerous import base64_encode
 
 from cloudify_rest_client import CloudifyClient
 
+
 import cloudify_cli
 from cloudify_cli import constants
 from cloudify_cli.exceptions import CloudifyCliError
@@ -38,6 +42,7 @@ from cloudify_cli.logger import get_logger
 from dsl_parser import utils as dsl_parser_utils
 from dsl_parser.constants import IMPORT_RESOLVER_KEY
 from cloudify_cli import messages
+
 
 DEFAULT_LOG_FILE = os.path.expanduser(
     '{0}/cloudify-{1}/cloudify-cli.log'
@@ -167,6 +172,13 @@ def is_initialized():
 
 
 def get_init_path():
+    """
+    Returns the path of the .cloudify dir
+
+    search in each directory up the cwd directory tree for the existence of the
+    Cloudify settings directory (`.cloudify`).
+    :return: if we found it, return it's path. else, return None
+    """
     current_lookup_dir = get_cwd()
     while True:
 
@@ -207,7 +219,7 @@ def dump_cloudify_working_dir_settings(cosmo_wd_settings=None, update=False):
         cosmo_wd_settings = CloudifyWorkingDirectorySettings()
     if update:
         # locate existing file
-        # this will raise an error if the file doesnt exist.
+        # this will raise an error if the file doesn't exist.
         target_file_path = get_context_path()
     else:
 
@@ -230,6 +242,14 @@ def is_use_colors():
 
     config = CloudifyConfig()
     return config.colors
+
+
+def is_auto_generate_ids():
+    if not is_initialized():
+        return False
+
+    config = CloudifyConfig()
+    return config.auto_generate_ids
 
 
 def get_import_resolver():
@@ -257,6 +277,8 @@ def update_wd_settings():
 
 
 def get_cwd():
+    """Allows use to patch the cwd when needed.
+    """
     return os.getcwd()
 
 
@@ -481,6 +503,24 @@ class CloudifyWorkingDirectorySettings(yaml.YAMLObject):
         self._protocol = protocol
 
 
+def remove_if_exists(path):
+
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+
+    except OSError as e:
+        if e.errno != errno.ENOENT:  # errno.ENOENT = no such file or directory
+            raise  # re-raise exception if a different error occurred
+
+
+def generate_random_string(size=6,
+                           chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
+
 def delete_cloudify_working_dir_settings():
     target_file_path = os.path.join(
         get_cwd(), constants.CLOUDIFY_WD_SETTINGS_DIRECTORY_NAME,
@@ -513,6 +553,10 @@ class CloudifyConfig(object):
         return self._config.get('colors', False)
 
     @property
+    def auto_generate_ids(self):
+        return self._config.get('auto_generate_ids', False)
+
+    @property
     def logging(self):
         return self.Logging(self._config.get('logging', {}))
 
@@ -527,3 +571,7 @@ class CloudifyConfig(object):
     @property
     def validate_definitions_version(self):
         return self._config.get('validate_definitions_version', True)
+
+
+def build_manager_host_string():
+    return '{0}@{1}'.format(get_management_user(), get_management_server_ip())

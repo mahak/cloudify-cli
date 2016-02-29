@@ -107,17 +107,17 @@ class CliCommandTest(unittest.TestCase):
             cli_runner.run_cli(cli_cmd)
             self.fail('Expected error {0} was not raised for command {1}'
                       .format(err_str_segment, cli_cmd))
-        except SystemExit, ex:
+        except SystemExit as ex:
             _assert()
-        except exceptions.CloudifyCliError, ex:
+        except exceptions.CloudifyCliError as ex:
             _assert()
-        except exceptions.CloudifyValidationError, ex:
+        except exceptions.CloudifyValidationError as ex:
             _assert()
-        except CloudifyClientError, ex:
+        except CloudifyClientError as ex:
             _assert()
-        except ValueError, ex:
+        except ValueError as ex:
             _assert()
-        except IOError, ex:
+        except IOError as ex:
             _assert()
         except ImportError as ex:
             _assert()
@@ -126,13 +126,17 @@ class CliCommandTest(unittest.TestCase):
                              cli_command,
                              module,
                              function_name,
-                             kwargs):
+                             args=None,
+                             kwargs=None):
+        args = args or []
+        kwargs = kwargs or {}
+
         with patch.object(module, function_name) as mock:
             try:
                 cli_runner.run_cli(cli_command)
             except BaseException as e:
                 self.logger.info(e.message)
-            mock.assert_called_with(**kwargs)
+            mock.assert_called_with(*args, **kwargs)
 
     def _create_cosmo_wd_settings(self, settings=None):
         directory_settings = utils.CloudifyWorkingDirectorySettings()

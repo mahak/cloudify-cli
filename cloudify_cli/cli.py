@@ -23,6 +23,7 @@ import logging
 
 from cloudify_rest_client.exceptions import CloudifyClientError
 
+from cloudify_cli import constants
 from cloudify_cli.exceptions import SuppressedCloudifyCliError
 from cloudify_cli.exceptions import CloudifyBootstrapError
 
@@ -48,6 +49,10 @@ def _parse_args(args):
 
     parser = register_commands()
 
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+
     argcomplete.autocomplete(parser)
     parsed = parser.parse_args(args)
     set_global_verbosity_level(parsed.verbosity)
@@ -67,7 +72,12 @@ def register_commands():
     for argument_name, argument in parser_conf['arguments'].iteritems():
         parser.add_argument(argument_name, **argument)
 
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(
+        title='Commands',
+        metavar=(' ' * (constants.HELP_TEXT_COLUMN_BUFFER +
+                        longest_command_length(parser_conf['commands'])))
+    )
+
     for command_name, command in parser_conf['commands'].iteritems():
 
         if 'sub_commands' in command:
@@ -78,7 +88,12 @@ def register_commands():
             controller_parser = subparsers.add_parser(
                 command_name, help=controller_help
             )
-            controller_subparsers = controller_parser.add_subparsers()
+            controller_subparsers = controller_parser.add_subparsers(
+                title='Commands',
+                metavar=(' ' *
+                         (constants.HELP_TEXT_COLUMN_BUFFER +
+                          longest_command_length(command['sub_commands'])))
+            )
             for controller_sub_command_name, controller_sub_command in \
                     command['sub_commands'].iteritems():
                 register_command(controller_subparsers,
@@ -245,6 +260,11 @@ def _set_cli_except_hook():
             recommend(getattr(value, 'possible_solutions'))
 
     sys.excepthook = new_excepthook
+
+
+def longest_command_length(commands_dict):
+
+    return max([len(key) for key in commands_dict.keys()])
 
 
 if __name__ == '__main__':
