@@ -46,8 +46,8 @@ def manager_blueprint_path_argument():
         'type': argparse.FileType(),
         'completer': completion_utils.yaml_files_completer
     }
-    hlp = "Path to the application's blueprint file." \
-          "Default: `{0}`".format(DEFAULT_BLUEPRINT_PATH)
+    hlp = "Path to the application's blueprint file. " \
+          "(default: {0})".format(DEFAULT_BLUEPRINT_PATH)
 
     # Update the specific 'manager blueprint path argument' attributes with
     # those that are shared with the 'local blueprint path argument'
@@ -103,7 +103,8 @@ def deployment_id_argument(hlp):
 def inputs_argument(hlp):
     return {
         'dest': 'inputs',
-        'help': hlp
+        'help': hlp,
+        'action': 'append'
     }
 
 
@@ -129,8 +130,9 @@ def workflow_id_argument(hlp):
 def parameters_argument():
     return {
         'dest': 'parameters',
-        'default': DEFAULT_PARAMETERS,
-        'help': 'Parameters for the workflow execution ({0})'
+        'action': 'append',
+        'help': ('Parameters for the workflow execution ({0}). '
+        'This argument can be used multiple times.')
         .format(FORMAT_INPUT_AS_YAML_OR_DICT)
     }
 
@@ -229,7 +231,7 @@ def auto_generate_ids_argument():
     return {
         'dest': 'auto_generate_ids',
         'action': 'store_true',
-        'help': 'auto generate blueprint and deployment ids'
+        'help': 'Auto generate blueprint and deployment ids'
     }
 
 
@@ -244,7 +246,7 @@ def parser_config():
         },
         'commands': {
             'logs': {
-                'help': 'Handles Cloudify Manager logs',
+                'help': 'Handle Cloudify Manager logs',
                 'sub_commands': {
                     'get': {
                         'arguments': {
@@ -254,7 +256,7 @@ def parser_config():
                                 'default': utils.get_cwd(),
                             }
                         },
-                        'help': "Retrieves an archive containing a Manager's logs (defaults to cwd)",
+                        'help': "Retrieve an archive containing a Manager's logs (default: cwd)",
                         'handler': cfy.logs.get
                     },
                     'purge': {
@@ -276,7 +278,7 @@ def parser_config():
                         'handler': cfy.logs.purge
                     },
                     'backup': {
-                        'help': "Backs up a Manager's logs",
+                        'help': "Back up a Manager's logs",
                         'handler': cfy.logs.backup
                     }
                 }
@@ -299,7 +301,7 @@ def parser_config():
                     '-n,--blueprint-filename': {
                         'dest': 'blueprint_filename',
                         'help': "The name of the archive's main "
-                                "blueprint file. Default: `{0}`"
+                                "blueprint file. (default: {0})"
                                 .format(DEFAULT_BLUEPRINT_FILE_NAME)
                         },
                     '-d,--deployment-id': deployment_id_argument(
@@ -307,13 +309,15 @@ def parser_config():
                         ),
                     '-i,--inputs':
                         inputs_argument('Inputs file/string for the deployment'
-                                        ' creation ({0}). Default: {1}'
+                                        ' creation ({0}). '
+                                        'This argument can be used multiple times. '
+                                        '(default: {1})'
                                         .format(FORMAT_INPUT_AS_YAML_OR_DICT,
                                                 DEFAULT_INPUTS_PATH_FOR_INSTALL_COMMAND)
                                         ),
                     '-w,--workflow': make_optional(workflow_id_argument(
                             hlp='The workflow to start '
-                                '(default: `{0}`)'
+                                '(default: {0})'
                                 .format(DEFAULT_INSTALL_WORKFLOW)
                             )
                         ),
@@ -337,7 +341,7 @@ def parser_config():
                             )
                         ),
                     '-w,--workflow': make_optional(workflow_id_argument(
-                            hlp='The workflow to start (default: `{0}`'
+                            hlp='The workflow to start (default: {0}'
                                 .format(DEFAULT_UNINSTALL_WORKFLOW))
                         ),
                     '--parameters': parameters_argument(),
@@ -440,8 +444,7 @@ def parser_config():
                         'handler': cfy.blueprints.download
                     },
                     'list': {
-                        'help': 'List all blueprints on the '
-                                'Manager',
+                        'help': 'List all blueprints on the Manager',
                         'handler': cfy.blueprints.ls
                     },
                     'delete': {
@@ -476,7 +479,7 @@ def parser_config():
                 }
             },
             'snapshots': {
-                'help': "Manages Cloudify's Snapshots",
+                'help': "Manage Cloudify's Snapshots",
                 'sub_commands': {
                     'create': {
                         'arguments': {
@@ -549,8 +552,8 @@ def parser_config():
                             '-f,--force':
                                 force_argument(
                                         hlp='Force restoring the snapshot on '
-                                            'a Manager with existing blueprints'
-                                            'and/or deployments')
+                                            'a Manager with existing '
+                                            'blueprints and/or deployments')
                         },
                         'help': 'Restore manager state to a specific snapshot',
                         'handler': cfy.snapshots.restore
@@ -558,7 +561,7 @@ def parser_config():
                 }
             },
             'agents': {
-                'help': "Manages Cloudify's Agents",
+                'help': "Manage Cloudify's Agents",
                 'sub_commands': {
                     'install': {
                         'arguments': {
@@ -589,9 +592,10 @@ def parser_config():
                             ),
                             '-b,--blueprint-id': blueprint_id_argument(),
                             '-i,--inputs': inputs_argument(
-                                hlp='Inputs file/string for the deployment'
-                                    'creation ({0})'
-                                    .format(FORMAT_INPUT_AS_YAML_OR_DICT))
+                                hlp='Inputs file/string for the deployment creation ({0}) '
+                                    'This argument can be used multiple times.'
+                                    .format(FORMAT_INPUT_AS_YAML_OR_DICT)
+                            )
                         },
                         'help': 'Create a deployment from a blueprint',
                         'handler': cfy.deployments.create
@@ -828,14 +832,15 @@ def parser_config():
                                 make_optional(
                                         local_blueprint_path_argument(
                                                 hlp="Path to the application's"
-                                                    "blueprint file. Default: "
-                                                    "`{0}`".format(DEFAULT_BLUEPRINT_PATH)
+                                                    "blueprint file. (default: "
+                                                    "{0})".format(DEFAULT_BLUEPRINT_PATH)
                                         )
                                 ),
                             '-i,--inputs':
                                 inputs_argument('Inputs file/string for the '
                                                 'deployment creation ({0}). '
-                                                'Default: {1}'
+                                                'This argument can be used multiple times. '
+                                                '(default: {1})'
                                                 .format(FORMAT_INPUT_AS_YAML_OR_DICT,
                                                         DEFAULT_INPUTS_PATH_FOR_INSTALL_COMMAND)
                                                 ),
@@ -843,7 +848,7 @@ def parser_config():
                             '-w,--workflow': make_optional(
                                     workflow_id_argument(
                                             hlp='The workflow to start '
-                                                '(default: `{0}`'
+                                                '(default: {0}'
                                                 .format(DEFAULT_INSTALL_WORKFLOW)
                                     )
                                 ),
@@ -864,7 +869,7 @@ def parser_config():
                             '-w,--workflow': make_optional(
                                     workflow_id_argument(
                                             hlp='The workflow to start '
-                                                '(default: `{0}`'
+                                                '(default: {0}'
                                                 .format(DEFAULT_UNINSTALL_WORKFLOW)
                                     )
                                 ),
@@ -888,8 +893,8 @@ def parser_config():
                                         hlp='Path to a blueprint'
                                 ),
                             '-i,--inputs': inputs_argument(
-                                    hlp='Inputs file/string for the local '
-                                        'workflow creation ({0})'
+                                    hlp='Inputs files/strings for the local workflow creation ({0}). '
+                                        'This argument can be used multiple times.'
                                         .format(FORMAT_INPUT_AS_YAML_OR_DICT)
                                 ),
                             '--install-plugins': install_plugins_argument()
@@ -963,7 +968,7 @@ def parser_config():
                 'handler': cfy.status
             },
             'dev': {
-                'help': 'Executes fabric tasks on the management machine',
+                'help': 'Execute fabric tasks on the management machine',
                 'arguments': {
                     '-t,--task': {
                         'dest': 'task',
@@ -1006,7 +1011,8 @@ def parser_config():
                                 hlp='Path to a blueprint'
                         ),
                     '-i,--inputs': inputs_argument(
-                        hlp='Inputs file/string for a manager blueprint ({0})'
+                        hlp='Inputs file/string for a manager blueprint ({0}) '
+                            'This argument can be used multiple times.'
                             .format(FORMAT_INPUT_AS_YAML_OR_DICT)
                     ),
                     '--keep-up-on-failure': {
