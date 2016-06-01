@@ -19,6 +19,7 @@ Handles 'cfy upgrade command'
 import os
 import time
 import json
+import shutil
 import tempfile
 
 from cloudify_cli import ssh
@@ -27,6 +28,7 @@ from cloudify_cli import common
 from cloudify_cli import exceptions
 from cloudify_cli.logger import get_logger
 from cloudify_cli.commands import maintenance
+from cloudify_cli.bootstrap import bootstrap as bs
 from cloudify_cli.bootstrap.bootstrap import load_env
 
 
@@ -60,7 +62,7 @@ def upgrade(validate_only,
                                       install_plugins=install_plugins,
                                       name=env_name,
                                       inputs=json.dumps(inputs))
-    logger.info('Starting Manager upgrade process...')
+    logger.info('Upgrading manager...')
     put_workflow_state_file(is_upgrade=True,
                             key_filename=inputs['ssh_key_filename'],
                             user=inputs['ssh_user'])
@@ -76,17 +78,17 @@ def upgrade(validate_only,
 
     if not validate_only:
         try:
-            logger.info('Executing Manager upgrade...')
+            logger.info('Executing manager upgrade...')
             env.execute('install',
                         task_retries=task_retries,
                         task_retry_interval=task_retry_interval,
                         task_thread_pool_size=task_thread_pool_size)
         except Exception as e:
-            msg = 'Failed upgrading Manager. Error: {0}'.format(e)
+            msg = 'Upgrade failed! ({0})'.format(e)
             error = exceptions.CloudifyCliError(msg)
             error.possible_solutions = [
-                "Rerun Manager upgrade command 'cfy upgrade'",
-                "Execute rollback command 'cfy rollback'"
+                "Rerun upgrade: `cfy upgrade`",
+                "Execute rollback: `cfy rollback`"
             ]
             raise error
 
@@ -94,19 +96,34 @@ def upgrade(validate_only,
                             if node.id == 'manager_configuration')
         upload_resources = \
             manager_node.properties['cloudify'].get('upload_resources', {})
+        dsl_resources = upload_resources.get('dsl_resources', ())
+        if dsl_resources:
+            fetch_timeout = upload_resources.get('parameters', {}) \
+                .get('fetch_timeout', 30)
+            fabric_env = bs.build_fabric_env(management_ip,
+                                             inputs['ssh_user'],
+                                             inputs['ssh_key_filename'])
+            temp_dir = tempfile.mkdtemp()
+            try:
+                logger.info('Uploading dsl resources...')
+                bs.upload_dsl_resources(dsl_resources,
+                                        temp_dir=temp_dir,
+                                        fabric_env=fabric_env,
+                                        retries=task_retries,
+                                        wait_interval=task_retry_interval,
+                                        timeout=fetch_timeout)
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
         plugin_resources = upload_resources.get('plugin_resources', ())
         if plugin_resources:
             logger.warn('Plugins upload is not supported for upgrade. Plugins '
-                        '{0} will not be uploaded to Manager'
+                        '{0} will not be uploaded'
                         .format(plugin_resources))
-        dsl_resources = upload_resources.get('dsl_resources', ())
-        if dsl_resources:
-            logger.warn('dsl resource upload is not supported for upgrade. '
-                        'Resources {0} will not be uploaded to Manager'
-                        .format(dsl_resources))
 
-    logger.info('Upgrade complete. Management server is up at {0}'
-                .format(utils.get_management_server_ip()))
+    logger.info('Upgrade complete')
+    logger.info('Manager is up at {0}'.format(
+        utils.get_management_server_ip()))
 
 
 def update_inputs(inputs=None):
@@ -122,8 +139,8 @@ def _load_private_ip(inputs):
     try:
         return inputs['private_ip'] or load_env().outputs()['private_ip']
     except Exception:
-        raise exceptions.CloudifyCliError('Private IP must be provided for'
-                                          ' the upgrade/rollback process')
+        raise exceptions.CloudifyCliError('Private IP must be provided for '
+                                          'the upgrade/rollback process')
 
 
 def _load_management_key(inputs):
@@ -131,8 +148,8 @@ def _load_management_key(inputs):
         key_path = inputs['ssh_key_filename'] or utils.get_management_key()
         return os.path.expanduser(key_path)
     except Exception:
-        raise exceptions.CloudifyCliError('Management key must be provided for'
-                                          ' the upgrade/rollback process')
+        raise exceptions.CloudifyCliError('Manager key must be provided for '
+                                          'the upgrade/rollback process')
 
 
 def _load_management_user(inputs):
@@ -147,11 +164,12 @@ def verify_and_wait_for_maintenance_mode_activation(client):
     logger = get_logger()
     curr_status = client.maintenance_mode.status().status
     if curr_status == MAINTENANCE_MODE_DEACTIVATED:
-        msg = 'Manager must be in maintenance-mode for workflow to run'
-        error = exceptions.CloudifyCliError(msg)
+        error = exceptions.CloudifyCliError(
+            'To perform an upgrade of a manager to a newer version, '
+            'the manager must be in maintenance mode')
         error.possible_solutions = [
             "Activate maintenance mode by running "
-            "'cfy maintenance-mode activate'"
+            "`cfy maintenance-mode activate`"
         ]
         raise error
     elif curr_status == MAINTENANCE_MODE_ACTIVATING:
@@ -172,6 +190,6 @@ def put_workflow_state_file(is_upgrade, key_filename, user):
 def _wait_for_maintenance(client, logger):
     curr_status = client.maintenance_mode.status().status
     while curr_status != maintenance.MAINTENANCE_MODE_ACTIVE:
-        logger.info('Waiting for maintenance mode activation...')
+        logger.info('Waiting for maintenance mode to be activated...')
         time.sleep(maintenance.DEFAULT_TIMEOUT_INTERVAL)
         curr_status = client.maintenance_mode.status().status
