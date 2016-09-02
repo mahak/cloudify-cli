@@ -15,12 +15,12 @@
 ############
 
 import sys
+import difflib
 import StringIO
 import traceback
 from functools import wraps
 
 import click
-from click_didyoumean import DYMGroup
 
 from cloudify_rest_client.exceptions import NotModifiedError
 from cloudify_rest_client.exceptions import CloudifyClientError
@@ -34,7 +34,7 @@ from ..inputs import inputs_to_dict
 from ..constants import DEFAULT_BLUEPRINT_PATH
 from ..exceptions import CloudifyBootstrapError
 from ..exceptions import SuppressedCloudifyCliError
-from ..logger import get_logger, set_global_verbosity_level
+from ..logger import get_logger, set_global_verbosity_level, DEFAULT_LOG_FILE
 
 
 CLICK_CONTEXT_SETTINGS = dict(
@@ -150,11 +150,19 @@ def set_cli_except_hook(global_verbosity_level):
             logger.info('  - {0}'.format(solution))
 
     def new_excepthook(tpe, value, tb):
+        with open(DEFAULT_LOG_FILE, 'a') as log_file:
+            traceback.print_exception(
+                etype=tpe,
+                value=value,
+                tb=tb,
+                file=log_file)
+
         logger = get_logger()
 
         prefix = None
         server_traceback = None
         output_message = True
+
         if issubclass(tpe, CloudifyClientError):
             server_traceback = value.server_traceback
             if not issubclass(
@@ -258,6 +266,46 @@ def pass_context(func):
     return click.pass_context(func)
 
 
+class AliasedGroup(click.Group):
+    def __init__(self, *args, **kwargs):
+        self.max_suggestions = kwargs.pop("max_suggestions", 3)
+        self.cutoff = kwargs.pop("cutoff", 0.5)
+        super(AliasedGroup, self).__init__(*args, **kwargs)
+
+    def get_command(self, ctx, cmd_name):
+        rv = click.Group.get_command(self, ctx, cmd_name)
+        if rv is not None:
+            return rv
+        matches = \
+            [x for x in self.list_commands(ctx) if x.startswith(cmd_name)]
+        if not matches:
+            return None
+        elif len(matches) == 1:
+            return click.Group.get_command(self, ctx, matches[0])
+        ctx.fail('Too many matches: {0}'.format(', '.join(sorted(matches))))
+
+    def resolve_command(self, ctx, args):
+        """
+        Overrides clicks ``resolve_command`` method
+        and appends *Did you mean ...* suggestions
+        to the raised exception message.
+        """
+        try:
+            return super(AliasedGroup, self).resolve_command(ctx, args)
+        except click.exceptions.UsageError as error:
+            error_msg = str(error)
+            original_cmd_name = click.utils.make_str(args[0])
+            matches = difflib.get_close_matches(
+                original_cmd_name,
+                self.list_commands(ctx),
+                self.max_suggestions,
+                self.cutoff)
+            if matches:
+                error_msg += '\n\nDid you mean one of these?\n    {0}'.format(
+                    '\n    '.join(matches))
+            raise click.exceptions.UsageError(error_msg, error.ctx)
+
+
 def group(name):
     """Allows to create a group with a default click context
     and a cls for click's `didyoueamn` without having to repeat
@@ -266,7 +314,7 @@ def group(name):
     return click.group(
         name=name,
         context_settings=CLICK_CONTEXT_SETTINGS,
-        cls=DYMGroup)
+        cls=AliasedGroup)
 
 
 def command(*args, **kwargs):
@@ -604,6 +652,14 @@ class Options(object):
             '--deployment-id',
             required=required,
             help=helptexts.DEPLOYMENT_ID)
+
+    @staticmethod
+    def execution_id(required=False):
+        return click.option(
+            '-e',
+            '--execution-id',
+            required=required,
+            help=helptexts.EXECUTION_ID)
 
     @staticmethod
     def blueprint_id(required=False, multiple_blueprints=False):

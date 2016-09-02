@@ -42,7 +42,7 @@ def use(profile_name,
         logger):
     """Control a specific manager
 
-    `MANAGEMENT_IP` is the IP of the manager to use.
+    `PROFILE_NAME` can be either a manager IP or `local`.
 
     Additional CLI commands will be added after a manager is used.
     To stop using a manager, you can run `cfy init -r`.
@@ -141,5 +141,6 @@ def _set_profile_context(profile_name,
     if rest_port:
         profile.rest_port = rest_port
     profile.rest_protocol = rest_protocol
+    profile.bootstrap_state = 'Complete'
 
     profile.save()

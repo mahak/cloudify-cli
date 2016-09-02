@@ -128,13 +128,12 @@ def is_initialized(profile_name=None):
     """Checks if a profile or an environment is initialized.
 
     If profile_name is provided, it will check if the profile
-    is initialzed. If not, it will just check that the `local`
-    profile is.
+    is initialzed. If not, it will just check that workenv is.
     """
     if profile_name:
         return get_profile_dir(profile_name) is not None
     else:
-        return os.path.isdir(CLOUDIFY_WORKDIR)
+        return os.path.isfile(os.path.join(CLOUDIFY_WORKDIR, 'config.yaml'))
 
 
 def get_context_path(profile_name, suppress_error=False):
@@ -287,7 +286,7 @@ class ProfileContext(yaml.YAMLObject):
     yaml_loader = yaml.Loader
 
     def __init__(self, profile_name=None):
-        self._bootstrap_state = None
+        self._bootstrap_state = 'Incomplete'
         self._manager_ip = profile_name
         self._manager_key = None
         self._manager_port = None
@@ -373,12 +372,12 @@ class ProfileContext(yaml.YAMLObject):
             constants.CLOUDIFY_PROFILE_CONTEXT_FILE_NAME)
         return context_path
 
-    def save(self):
+    def save(self, destination=None):
         if not self.manager_ip:
             raise CloudifyCliError('No Manager IP set')
 
-        workdir = os.path.join(PROFILES_DIR, self.manager_ip)
-        # create a new file
+        workdir = destination or os.path.join(PROFILES_DIR, self.manager_ip)
+        # Create a new file
         if not os.path.exists(workdir):
             os.makedirs(workdir)
         target_file_path = os.path.join(
