@@ -29,7 +29,7 @@ function download_wheels() {
     https://github.com/cloudify-cosmo/cloudify-script-plugin/archive/1.4.zip#egg=cloudify-script-plugin \
     https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.4.1.zip#egg=cloudify-fabric-plugin \
     https://github.com/cloudify-cosmo/cloudify-openstack-plugin/archive/1.4.zip#egg=cloudify-openstack-plugin \
-    https://github.com/cloudify-cosmo/cloudify-aws-plugin/archive/1.4.zip#egg=cloudify-aws-plugin \
+    https://github.com/cloudify-cosmo/cloudify-aws-plugin/archive/1.4.1.zip#egg=cloudify-aws-plugin \
     https://github.com/cloudify-cosmo/tosca-vcloud-plugin/archive/1.3.1.zip#egg=cloudify-vcloud-plugin \
     https://github.com/cloudify-cosmo/cloudify-vsphere-plugin/archive/2.0.zip#egg=cloudify-vsphere-plugin \
     https://$GITHUB_USERNAME:$GITHUB_PASSWORD@github.com/cloudify-cosmo/cloudify-softlayer-plugin/archive/1.3.1.zip#egg=cloudify-softlayer-plugin
@@ -90,7 +90,7 @@ function update_remote_to_local_links() {
 
 # VERSION/PRERELEASE/BUILD/CORE_TAG_NAME/PLUGINS_TAG_NAME must be exported as they are being read as an env var by the install wizard
 
-CORE_TAG_NAME="4.0m4"
+CORE_TAG_NAME="4.0m5"
 curl https://raw.githubusercontent.com/cloudify-cosmo/cloudify-packager/${CORE_TAG_NAME}/common/provision.sh -o ./common-provision.sh &&
 source common-provision.sh
 
