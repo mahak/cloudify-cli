@@ -95,13 +95,22 @@ def assert_local_active():
 
 
 def assert_credentials_set():
-    if not is_credentials_set():
+    error_msg = 'Manager {0} must be set in order to use a manager.\n' \
+                'You can set it in the profile by running ' \
+                '`cfy profiles set-{1}`, or you can set the `CLOUDIFY_{2}` ' \
+                'environment variable.'
+    if not get_username():
         raise CloudifyCliError(
-            'A password must be set in order to use a manager, along with '
-            'the username set in the profile.\n'
-            'You can run `cfy use <profile_name> --manager-password <pass>` '
-            'to store the password in the profile, or set the '
-            '`CLOUDIFY_PASSWORD` environment variable.')
+            error_msg.format('Username', 'username', 'USERNAME')
+        )
+    if not get_password():
+        raise CloudifyCliError(
+            error_msg.format('Password', 'password', 'PASSWORD')
+        )
+    if not get_tenant_name():
+        raise CloudifyCliError(
+            error_msg.format('Tenant', 'tenant', 'TENANT')
+        )
 
 
 def is_manager_active():
@@ -114,12 +123,6 @@ def is_manager_active():
 
     p = get_profile_context(active_profile, suppress_error=True)
     if not (p and p.manager_ip):
-        return False
-    return True
-
-
-def is_credentials_set():
-    if not get_username() or not get_password():
         return False
     return True
 
@@ -239,21 +242,36 @@ def build_manager_host_string(ssh_user='', ip=''):
 
 
 def get_username():
-    return os.environ.get(
-        constants.CLOUDIFY_USERNAME_ENV,
-        profile.manager_username
-    )
+    username = os.environ.get(constants.CLOUDIFY_USERNAME_ENV)
+    if username and profile.manager_username:
+        raise CloudifyCliError('Manager Username is set in profile *and* in '
+                               'the `CLOUDIFY_USERNAME` env variable. Resolve '
+                               'the conflict before continuing.\n'
+                               'Either unset the env variable, or run '
+                               '`cfy profiles unset-username`')
+    return username or profile.manager_username
 
 
 def get_password():
-    return os.environ.get(
-        constants.CLOUDIFY_PASSWORD_ENV,
-        profile.manager_password
-    )
+    password = os.environ.get(constants.CLOUDIFY_PASSWORD_ENV)
+    if password and profile.manager_password:
+        raise CloudifyCliError('Manager Password is set in profile *and* in '
+                               'the `CLOUDIFY_PASSWORD` env variable. Resolve '
+                               'the conflict before continuing.\n'
+                               'Either unset the env variable, or run '
+                               '`cfy profiles unset-password`')
+    return password or profile.manager_password
 
 
 def get_tenant_name():
-    return os.environ.get(constants.CLOUDIFY_TENANT_ENV)
+    tenant = os.environ.get(constants.CLOUDIFY_TENANT_ENV)
+    if tenant and profile.manager_tenant:
+        raise CloudifyCliError('Manager Tenant is set in profile *and* in '
+                               'the `CLOUDIFY_TENANT` env variable. Resolve '
+                               'the conflict before continuing.\n'
+                               'Either unset the env variable, or run '
+                               '`cfy profiles unset-tenant`')
+    return tenant or profile.manager_tenant
 
 
 def get_default_rest_cert_local_path():
@@ -321,16 +339,17 @@ class ProfileContext(yaml.YAMLObject):
     yaml_loader = yaml.Loader
 
     def __init__(self, profile_name=None):
-        self._bootstrap_state = 'Incomplete'
-        self._manager_ip = profile_name
-        self._ssh_key = None
+        self.bootstrap_state = 'Incomplete'
+        self.manager_ip = profile_name
+        self.ssh_key = None
         self._ssh_port = None
-        self._ssh_user = None
-        self._provider_context = dict()
-        self._manager_username = None
-        self._manager_password = None
-        self._rest_port = constants.DEFAULT_REST_PORT
-        self._rest_protocol = constants.DEFAULT_REST_PROTOCOL
+        self.ssh_user = None
+        self.provider_context = dict()
+        self.manager_username = None
+        self.manager_password = None
+        self.manager_tenant = constants.DEFAULT_TENANT_NAME
+        self.rest_port = constants.DEFAULT_REST_PORT
+        self.rest_protocol = constants.DEFAULT_REST_PROTOCOL
 
     def to_dict(self):
         return dict(
@@ -341,33 +360,10 @@ class ProfileContext(yaml.YAMLObject):
             ssh_user=self.ssh_user,
             provider_context=self.provider_context,
             manager_username=self.manager_username,
+            manager_tenant=self.manager_tenant,
             rest_port=self.rest_port,
             rest_protocol=self.rest_protocol
         )
-
-    @property
-    def bootstrap_state(self):
-        return self._bootstrap_state
-
-    @bootstrap_state.setter
-    def bootstrap_state(self, bootstrap_state):
-        self._bootstrap_state = bootstrap_state
-
-    @property
-    def manager_ip(self):
-        return self._manager_ip
-
-    @manager_ip.setter
-    def manager_ip(self, manager_host):
-        self._manager_ip = manager_host
-
-    @property
-    def ssh_key(self):
-        return self._ssh_key
-
-    @ssh_key.setter
-    def ssh_key(self, manager_key):
-        self._ssh_key = manager_key
 
     @property
     def ssh_port(self):
@@ -379,57 +375,6 @@ class ProfileContext(yaml.YAMLObject):
         # leave None as is
         ssh_port = str(ssh_port) if ssh_port else None
         self._ssh_port = ssh_port
-
-    @property
-    def ssh_user(self):
-        return self._ssh_user
-
-    @ssh_user.setter
-    def ssh_user(self, _manager_user):
-        self._ssh_user = _manager_user
-
-    @property
-    def manager_username(self):
-        return self._manager_username
-
-    @manager_username.setter
-    def manager_username(self, manager_username):
-        self._manager_username = manager_username
-
-    @property
-    def manager_password(self):
-        return self._manager_password
-
-    @manager_password.setter
-    def manager_password(self, admin_password):
-        self._manager_password = admin_password
-
-    @property
-    def provider_context(self):
-        return self._provider_context
-
-    @provider_context.setter
-    def provider_context(self, provider_context):
-        self._provider_context = provider_context
-
-    def remove_manager_server_context(self):
-        self._manager_ip = None
-
-    @property
-    def rest_port(self):
-        return self._rest_port
-
-    @rest_port.setter
-    def rest_port(self, rest_port):
-        self._rest_port = rest_port
-
-    @property
-    def rest_protocol(self):
-        return self._rest_protocol
-
-    @rest_protocol.setter
-    def rest_protocol(self, rest_protocol):
-        self._rest_protocol = rest_protocol
 
     def _get_context_path(self):
         init_path = get_profile_dir(self.manager_ip)
