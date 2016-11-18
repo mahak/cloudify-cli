@@ -1,3 +1,4 @@
 {
-  "version": "4.0.0-m7"
+  "edition": "community",
+  "version": "4.0.0-m8"
 }
