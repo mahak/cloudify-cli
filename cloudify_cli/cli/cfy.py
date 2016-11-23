@@ -463,7 +463,7 @@ class Options(object):
             help=helptexts.MANAGEMENT_IP)
 
         self.ssh_user = click.option(
-            '-u',
+            '-s',
             '--ssh-user',
             required=False,
             help=helptexts.SSH_USER)
@@ -476,9 +476,17 @@ class Options(object):
             help=helptexts.SSH_KEY)
 
         self.manager_username = click.option(
-            '-m',
+            '-u',
             '--manager-username',
             required=False,
+            help=helptexts.MANAGER_USERNAME)
+
+        self.manager_username_flag = click.option(
+            '-u',
+            '--manager-username',
+            required=False,
+            is_flag=True,
+            default=False,
             help=helptexts.MANAGER_USERNAME)
 
         self.manager_password = click.option(
@@ -487,10 +495,26 @@ class Options(object):
             required=False,
             help=helptexts.MANAGER_PASSWORD)
 
+        self.manager_password_flag = click.option(
+            '-p',
+            '--manager-password',
+            required=False,
+            is_flag=True,
+            default=False,
+            help=helptexts.MANAGER_PASSWORD)
+
         self.manager_tenant = click.option(
             '-t',
             '--manager-tenant',
             required=False,
+            help=helptexts.MANAGER_TENANT)
+
+        self.manager_tenant_flag = click.option(
+            '-t',
+            '--manager-tenant',
+            required=False,
+            is_flag=True,
+            default=False,
             help=helptexts.MANAGER_TENANT)
 
         self.ssh_port = click.option(
@@ -612,9 +636,8 @@ class Options(object):
             '-r',
             '--security-role',
             required=False,
-            type=click.Choice(['administrator', 'default',
-                               'viewer', 'suspended']),
-            default='default',
+            type=click.Choice(['administrator', 'user', 'suspended']),
+            default='user',
             help=helptexts.SECURITY_ROLE)
 
         self.password = click.option(
@@ -638,6 +661,30 @@ class Options(object):
             '--cluster-node-name',
             default=lambda: 'cloudify_manager_' + generate_random_string(),
             help=helptexts.CLUSTER_NODE_NAME
+        )
+
+        self.private_resource = click.option(
+            '--private-resource',
+            is_flag=True,
+            default=False,
+            help=helptexts.PRIVATE_RESOURCE
+        )
+
+        self.users = click.option(
+            '-u',
+            '--users',
+            required=True,
+            multiple=True,
+            help=helptexts.USER
+        )
+
+        self.permission = click.option(
+            '-p',
+            '--permission',
+            required=False,
+            type=click.Choice(['viewer', 'owner']),
+            default='viewer',
+            help=helptexts.PERMISSION
         )
 
     @staticmethod
