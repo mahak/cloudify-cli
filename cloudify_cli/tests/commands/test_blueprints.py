@@ -38,10 +38,13 @@ class BlueprintsTest(CliCommandTest):
                 'description',
                 'main_file_name',
                 'created_at',
-                'updated_at'
+                'updated_at',
+                'permission',
+                'tenant_name'
             ],
             data=[{'description': '123456789012345678..'},
-                  {'description': 'abcdefg'}]
+                  {'description': 'abcdefg'}],
+            defaults=None
         )
 
     def test_blueprints_delete(self):
@@ -115,6 +118,14 @@ class BlueprintsTest(CliCommandTest):
         self.invoke(
                 'cfy blueprints upload https://aaa.com/maste.tar.gz -n b.yaml '
                 '-b blueprint3')
+
+    def test_blueprints_upload_from_github(self):
+        mocked = MagicMock()
+        self.client.blueprints.publish_archive = mocked
+        self.invoke(
+                'cfy blueprints upload organization/repo -n b.yaml '
+                '-b blueprint3')
+        self.assertIn('github.com', mocked.call_args[0][0])
 
     def test_blueprint_validate(self):
         self.invoke(
@@ -250,7 +261,7 @@ class BlueprintsTest(CliCommandTest):
             self.assertIn(requirement, output)
 
     def test_install_plugins(self):
-        self.invoke('cfy use local')
+        self.invoke('cfy profiles use local')
         blueprint_path = os.path.join(
             BLUEPRINTS_DIR,
             'local',

@@ -147,7 +147,7 @@ TAIL_OUTPUT = "Tail the events of the specified execution until it ends"
 SET_MANAGEMENT_CREDS = (
     'You can use the `-s` and `-k` flags to set the ssh user and '
     'key-file path respectively. '
-    '(e.g. `cfy use -s my_user -k ~/my/key/path`)'
+    '(e.g. `cfy profiles use -s my_user -k ~/my/key/path`)'
 )
 
 DEFAULT_MUTUALITY_MESSAGE = 'Cannot be used simultaneously'
@@ -187,6 +187,10 @@ CLUSTER_HOST_IP = \
 CLUSTER_JOIN = 'Address of one of the cluster members to join'
 CLUSTER_NODE_NAME = \
     'Name of this manager machine to be used internally in the cluster'
+CLUSTER_JOIN_PROFILE = (
+    'After joining the cluster, add the current manager to this profile '
+    '(use when you have a profile containing the cluster master)'
+)
 
 PRIVATE_RESOURCE = 'If set to True the uploaded resource will only be ' \
                    'accessible by its creator. Otherwise, the resource is ' \
