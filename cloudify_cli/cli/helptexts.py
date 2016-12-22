@@ -172,6 +172,8 @@ INSTALL_SCRIPT_LOCATION = \
     'Alternative location of the `install_agents.py` script'
 TENANT = 'The name of the tenant'
 GROUP = 'The name of the user group'
+GROUP_DN = 'The ldap group\'s distinguished name. This option is required ' \
+           'when using ldap'
 
 SECURITY_ROLE = "A role to determine the user's permissions on the manager " \
                 "[administrator|user|suspended] (default: user)"
@@ -208,3 +210,5 @@ RESTORE_SNAPSHOT_TENANT_NAME = 'The name of the tenant into which the ' \
                                'versions prior to 4.0.0. If passed when ' \
                                'restoring newer snapshots, an error ' \
                                'will be raised'
+SKIP_CREDENTIALS_VALIDATION = 'Do not check that the passed credentials are ' \
+                              'correct (default:False)'

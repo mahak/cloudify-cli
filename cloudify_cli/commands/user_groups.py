@@ -17,6 +17,7 @@
 from .. import env
 from ..cli import cfy
 from ..table import print_data
+from ..utils import handle_client_error
 
 GROUP_COLUMNS = ['name', 'tenants', 'users']
 
@@ -31,7 +32,7 @@ def user_groups():
 
 
 @user_groups.command(name='list',
-                     short_help='List groups [manager only]')
+                     short_help='List user groups [manager only]')
 @cfy.options.sort_by('name')
 @cfy.options.descending
 @cfy.options.verbose()
@@ -39,81 +40,105 @@ def user_groups():
 @cfy.pass_client()
 @cfy.pass_logger
 def list(sort_by, descending, logger, client):
-    """List all groups
+    """List all user groups
     """
-    logger.info('Listing all groups...')
+    logger.info('Listing all user groups...')
     user_groups_list = client.user_groups.list(sort=sort_by,
                                                is_descending=descending)
-    print_data(GROUP_COLUMNS, user_groups_list, 'Groups:')
+    print_data(GROUP_COLUMNS, user_groups_list, 'User groups:')
 
 
 @user_groups.command(name='create',
-                     short_help='Create a group [manager only]')
-@cfy.argument('group-name')
+                     short_help='Create a user group [manager only]')
+@cfy.argument('user-group-name')
+@cfy.options.ldap_distinguished_name
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def create(group_name, logger, client):
-    """Create a new group on the manager
+def create(user_group_name, ldap_distinguished_name, logger, client):
+    """Create a new user group on the manager
 
-    `GROUP_NAME` is the name of the new group
+    `USER_GROUP_NAME` is the name of the new user group
     """
-    client.user_groups.create(group_name)
-    logger.info('Group `{0}` created'.format(group_name))
+    client.user_groups.create(user_group_name,
+                              ldap_group_dn=ldap_distinguished_name)
+    logger.info('Group `{0}` created'.format(user_group_name))
 
 
 @user_groups.command(name='get',
                      short_help='Get details for a single '
                                 'user group [manager only]')
-@cfy.argument('group-name')
+@cfy.argument('user-group-name')
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def get(group_name, logger, client):
+def get(user_group_name, logger, client):
     """Get details for a single user group
 
-    `GROUP_NAME` is the name of the group
+    `USER_GROUP_NAME` is the name of the user group
     """
-    logger.info('Getting info for user group `{0}`...'.format(group_name))
-    user_group_details = client.user_groups.get(group_name)
+    logger.info('Getting info for user group `{0}`...'.format(user_group_name))
+    user_group_details = client.user_groups.get(user_group_name)
     print_data(GROUP_COLUMNS, user_group_details, 'Requested user group info:')
 
 
-@user_groups.command(
-    name='add-user',
-    short_help='Add a user to a users group [manager only]')
-@cfy.argument('group-name')
+@user_groups.command(name='add-user',
+                     short_help='Add a user to a user group [manager only]')
+@cfy.argument('user-group-name')
 @cfy.options.manager_username_required
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def add_user(group_name, manager_username, logger, client):
-    """Add a user to a group
+def add_user(user_group_name, manager_username, logger, client):
+    """Add a user to a user group
 
-    `GROUP_NAME` is the name of the group
+    `USER_GROUP_NAME` is the name of the user group
     """
-    client.users.add_to_group(manager_username, group_name)
-    logger.info('User `{0}` added successfully to group '
-                '`{1}`'.format(manager_username, group_name))
+    graceful_msg = 'User `{0}` is already associated with ' \
+                   'user group `{1}`'.format(manager_username, user_group_name)
+    with handle_client_error(409, graceful_msg, logger):
+        client.users.add_to_group(manager_username, user_group_name)
+        logger.info('User `{0}` added successfully to user group '
+                    '`{1}`'.format(manager_username, user_group_name))
 
 
 @user_groups.command(
     name='remove-user',
-    short_help='Remove a user from a users group [manager only]')
-@cfy.argument('group-name')
+    short_help='Remove a user from a user group [manager only]')
+@cfy.argument('user-group-name')
 @cfy.options.manager_username_required
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def remove_user(group_name, manager_username, logger, client):
-    """Remove a user from a group
+def remove_user(user_group_name, manager_username, logger, client):
+    """Remove a user from a user group
 
-    `USERNAME` is the username of the user
+    `USER_GROUP_NAME` is the name of the user group
     """
-    client.users.remove_from_group(manager_username, group_name)
-    logger.info('User `{0}` removed successfully from group '
-                '`{1}`'.format(manager_username, group_name))
+    graceful_msg = 'User `{0}` is not associated with ' \
+                   'user group `{1}`'.format(manager_username, user_group_name)
+    with handle_client_error(404, graceful_msg, logger):
+        client.users.remove_from_group(manager_username, user_group_name)
+        logger.info('User `{0}` removed successfully from user group '
+                    '`{1}`'.format(manager_username, user_group_name))
+
+
+@user_groups.command(name='delete',
+                     short_help='Delete a user group [manager only]')
+@cfy.argument('user_group-name')
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client()
+@cfy.pass_logger
+def delete(user_group_name, logger, client):
+    """Delete a user group
+
+    `USER_GROUP_NAME` is the name of the user group
+    """
+    logger.info('Deleting user group `{0}`...'.format(user_group_name))
+    client.user_groups.delete(user_group_name)
+    logger.info('User group removed')
