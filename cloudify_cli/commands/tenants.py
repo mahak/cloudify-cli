@@ -66,10 +66,10 @@ def create(tenant_name, logger, client):
 @tenants.command(name='add-user',
                  short_help='Add a user to a tenant [manager only]')
 @cfy.argument('username')
-@cfy.options.tenant_name()
+@cfy.options.tenant_name(show_default_in_help=False)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
-@cfy.pass_client()
+@cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
 def add_user(username, tenant_name, logger, client):
     """Add a user to a tenant
@@ -87,10 +87,10 @@ def add_user(username, tenant_name, logger, client):
 @tenants.command(name='remove-user',
                  short_help='Remove a user from a tenant [manager only]')
 @cfy.argument('username')
-@cfy.options.tenant_name()
+@cfy.options.tenant_name(show_default_in_help=False)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
-@cfy.pass_client()
+@cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
 def remove_user(username, tenant_name, logger, client):
     """Remove a user from a tenant
@@ -108,10 +108,10 @@ def remove_user(username, tenant_name, logger, client):
 @tenants.command(name='add-user-group',
                  short_help='Add a user group to a tenant [manager only]')
 @cfy.argument('user-group-name')
-@cfy.options.tenant_name()
+@cfy.options.tenant_name(show_default_in_help=False)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
-@cfy.pass_client()
+@cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
 def add_group(user_group_name, tenant_name, logger, client):
     """Add a user group to a tenant
@@ -129,10 +129,10 @@ def add_group(user_group_name, tenant_name, logger, client):
 @tenants.command(name='remove-user-group',
                  short_help='Remove a user group from a tenant [manager only]')
 @cfy.argument('user-group-name')
-@cfy.options.tenant_name()
+@cfy.options.tenant_name(show_default_in_help=False)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
-@cfy.pass_client()
+@cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
 def remove_group(user_group_name, tenant_name, logger, client):
     """Remove a user group from a tenant
@@ -152,7 +152,7 @@ def remove_group(user_group_name, tenant_name, logger, client):
 @cfy.argument('tenant-name')
 @cfy.options.verbose()
 @cfy.assert_manager_active()
-@cfy.pass_client()
+@cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
 def get(tenant_name, logger, client):
     """Get details for a single tenant
@@ -169,7 +169,7 @@ def get(tenant_name, logger, client):
 @cfy.argument('tenant-name')
 @cfy.options.verbose()
 @cfy.assert_manager_active()
-@cfy.pass_client()
+@cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
 def delete(tenant_name, logger, client):
     """Delete a tenant

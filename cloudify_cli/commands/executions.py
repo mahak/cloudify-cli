@@ -24,6 +24,7 @@ from .. import utils
 from ..table import print_data
 from ..cli import cfy, helptexts
 from ..logger import get_events_logger
+from ..constants import DEFAULT_UNINSTALL_WORKFLOW
 from ..execution_events_fetcher import wait_for_execution
 from ..exceptions import CloudifyCliError, ExecutionTimeoutError, \
     SuppressedCloudifyCliError
@@ -48,7 +49,7 @@ def executions():
              short_help='Retrieve execution information [manager only]')
 @cfy.argument('execution-id')
 @cfy.options.verbose()
-@cfy.options.tenant_name(required=False)
+@cfy.options.tenant_name(required=False, resource_name_for_help='execution')
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
@@ -85,7 +86,7 @@ def manager_get(execution_id, logger, client, tenant_name):
 @cfy.options.include_system_workflows
 @cfy.options.sort_by()
 @cfy.options.descending
-@cfy.options.tenant_name(required=False)
+@cfy.options.tenant_name(required=False, resource_name_for_help='executions')
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client()
@@ -142,7 +143,7 @@ def manager_list(
 @cfy.options.include_logs
 @cfy.options.json_output
 @cfy.options.verbose()
-@cfy.options.tenant_name(required=False)
+@cfy.options.tenant_name(required=False, resource_name_for_help='execution')
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
@@ -223,6 +224,14 @@ def manager_start(workflow_id,
                             deployment_id,
                             execution.error))
             logger.info(events_message.format(execution.id))
+            if workflow_id == DEFAULT_UNINSTALL_WORKFLOW and not str(
+                    parameters.get('ignore_failure')).lower() == 'true':
+                logger.info(
+                    'Note that for the {0} workflow you can use the '
+                    '`ignore_failure` parameter to ignore operation failures '
+                    'and continue the workflow. I.E: cfy executions start {0} '
+                    '-d {1} -p ignore_failure=true'.format(
+                        workflow_id, deployment_id))
             raise SuppressedCloudifyCliError()
         else:
             logger.info('Finished executing workflow {0} on deployment '
@@ -252,7 +261,7 @@ def manager_start(workflow_id,
 @cfy.argument('execution-id')
 @cfy.options.force(help=helptexts.FORCE_CANCEL_EXECUTION)
 @cfy.options.verbose()
-@cfy.options.tenant_name(required=False)
+@cfy.options.tenant_name(required=False, resource_name_for_help='execution')
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
