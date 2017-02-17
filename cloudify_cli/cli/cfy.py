@@ -659,7 +659,7 @@ class Options(object):
             '-r',
             '--security-role',
             required=False,
-            type=click.Choice(['administrator', 'user', 'suspended']),
+            type=click.Choice(['admin', 'user', 'suspended']),
             default='user',
             help=helptexts.SECURITY_ROLE)
 
@@ -713,6 +713,13 @@ class Options(object):
             type=click.Choice(['viewer', 'owner']),
             default='viewer',
             help=helptexts.PERMISSION
+        )
+
+        self.get_data = click.option(
+            '--get-data',
+            is_flag=True,
+            default=False,
+            help=helptexts.GET_DATA
         )
 
     @staticmethod
