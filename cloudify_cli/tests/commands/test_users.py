@@ -16,6 +16,7 @@
 from mock import MagicMock
 
 from .test_base import CliCommandTest
+from cloudify_cli.exceptions import CloudifyValidationError
 
 
 class UsersTest(CliCommandTest):
@@ -46,9 +47,9 @@ class UsersTest(CliCommandTest):
         self.assertEqual(call_list, ('username', 'password', 'user'))
 
     def test_create_users_custom_role(self):
-        self.invoke('cfy users create username -p password -r suspended')
+        self.invoke('cfy users create username -p password -r admin')
         call_list = self.client.users.method_calls[0][1]
-        self.assertEqual(call_list, ('username', 'password', 'suspended'))
+        self.assertEqual(call_list, ('username', 'password', 'admin'))
 
     def test_create_users_invalid_role(self):
         outcome = self.invoke(
@@ -59,4 +60,19 @@ class UsersTest(CliCommandTest):
         self.assertIn(
             'Invalid value for "-r" / "--security-role"',
             outcome.output
+        )
+
+    def test_empty_username(self):
+        self.invoke(
+            'cfy users create "" -p ""',
+            err_str_segment='ERROR: The `username` argument is empty',
+            exception=CloudifyValidationError
+        )
+
+    def test_illegal_characters_in_username(self):
+        self.invoke(
+            'cfy users create "#&*" -p ""',
+            err_str_segment='ERROR: The `username` argument contains '
+                            'illegal characters',
+            exception=CloudifyValidationError
         )

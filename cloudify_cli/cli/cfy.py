@@ -17,6 +17,7 @@
 
 import os
 import sys
+import urllib
 import difflib
 import StringIO
 import traceback
@@ -35,8 +36,8 @@ from ..cli import helptexts
 from ..inputs import inputs_to_dict
 from ..utils import generate_random_string
 from ..constants import DEFAULT_BLUEPRINT_PATH
-from ..exceptions import CloudifyBootstrapError
 from ..exceptions import SuppressedCloudifyCliError
+from ..exceptions import CloudifyBootstrapError, CloudifyValidationError
 from ..logger import get_logger, set_global_verbosity_level, DEFAULT_LOG_FILE
 
 
@@ -111,21 +112,24 @@ def show_version(ctx, param, value):
     cli_version_data = env.get_version_data()
     rest_version_data = env.get_manager_version_data() \
         if env.is_manager_active() else None
+    output = ''
+    if rest_version_data:
+        edition = rest_version_data['edition'].title()
+        output += '{0} edition\n\n'.format(edition)
 
-    cli_version = _format_version_data(
+    output += _format_version_data(
         cli_version_data,
         prefix='Cloudify CLI ',
         infix=' ' * 5,
         suffix='\n')
-    rest_version = ''
     if rest_version_data:
-        rest_version = _format_version_data(
+        output += _format_version_data(
             rest_version_data,
             prefix='Cloudify Manager ',
             infix=' ',
             suffix=' [ip={ip}]\n'.format(**rest_version_data))
 
-    get_logger().info('{0}{1}'.format(cli_version, rest_version))
+    get_logger().info(output)
     ctx.exit()
 
 
@@ -142,6 +146,26 @@ def inputs_callback(ctx, param, value):
         return {}
 
     return inputs_to_dict(value)
+
+
+def validate_name(ctx, param, value):
+    if value is None or ctx.resilient_parsing:
+        return
+
+    if not value:
+        raise CloudifyValidationError(
+            'ERROR: The `{0}` argument is empty'.format(param.name)
+        )
+
+    quoted_value = urllib.quote(value, safe='')
+    if value != quoted_value:
+        raise CloudifyValidationError(
+            'ERROR: The `{0}` argument contains illegal characters. Only '
+            'letters, digits and the characters "-", "." and "_" are '
+            'allowed'.format(param.name)
+        )
+
+    return value
 
 
 def set_verbosity_level(ctx, param, value):
@@ -502,7 +526,9 @@ class Options(object):
             '-u',
             '--manager-username',
             required=False,
-            help=helptexts.MANAGER_USERNAME)
+            help=helptexts.MANAGER_USERNAME,
+            callback=validate_name
+        )
 
         self.manager_username_flag = click.option(
             '-u',
@@ -530,7 +556,9 @@ class Options(object):
             '-t',
             '--manager-tenant',
             required=False,
-            help=helptexts.MANAGER_TENANT)
+            help=helptexts.MANAGER_TENANT,
+            callback=validate_name
+        )
 
         self.manager_tenant_flag = click.option(
             '-t',
@@ -609,7 +637,9 @@ class Options(object):
             '-g',
             '--group-name',
             required=True,
-            help=helptexts.GROUP)
+            help=helptexts.GROUP,
+            callback=validate_name
+        )
 
         self.ldap_distinguished_name = click.option(
             '-l',
@@ -659,7 +689,7 @@ class Options(object):
             '-r',
             '--security-role',
             required=False,
-            type=click.Choice(['admin', 'user', 'suspended']),
+            type=click.Choice(['admin', 'user']),
             default='user',
             help=helptexts.SECURITY_ROLE)
 
@@ -751,7 +781,8 @@ class Options(object):
             'required': required,
             'multiple': False,
             'help': _tenant_help_message(
-                help, helptexts.TENANT_TEMPLATE, resource_name_for_help)
+                help, helptexts.TENANT_TEMPLATE, resource_name_for_help),
+            'callback': validate_name
         }
         if show_default_in_help:
             kwargs['help'] += \

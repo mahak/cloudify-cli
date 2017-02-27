@@ -17,6 +17,7 @@
 from .. import env
 from ..cli import cfy
 from ..table import print_data
+from ..utils import handle_client_error
 
 USER_COLUMNS = ['username', 'groups', 'role', 'tenants', 'active',
                 'last_login_at']
@@ -52,7 +53,7 @@ def list(sort_by, descending, get_data, logger, client):
 
 
 @users.command(name='create', short_help='Create a user [manager only]')
-@cfy.argument('username')
+@cfy.argument('username', callback=cfy.validate_name)
 @cfy.options.verbose()
 @cfy.options.security_role
 @cfy.options.password
@@ -70,7 +71,7 @@ def create(username, security_role, password, logger, client):
 
 @users.command(name='set-password',
                short_help='Set a new password for a user [manager only]')
-@cfy.argument('username')
+@cfy.argument('username', callback=cfy.validate_name)
 @cfy.options.password
 @cfy.options.verbose()
 @cfy.assert_manager_active()
@@ -88,7 +89,7 @@ def set_password(username, password, logger, client):
 
 @users.command(name='set-role',
                short_help='Set a new role for a user [manager only]')
-@cfy.argument('username')
+@cfy.argument('username', callback=cfy.validate_name)
 @cfy.options.security_role
 @cfy.options.verbose()
 @cfy.assert_manager_active()
@@ -106,7 +107,7 @@ def set_role(username, security_role, logger, client):
 
 @users.command(name='get',
                short_help='Get details for a single user [manager only]')
-@cfy.argument('username')
+@cfy.argument('username', callback=cfy.validate_name)
 @cfy.options.verbose()
 @cfy.options.get_data
 @cfy.assert_manager_active()
@@ -124,7 +125,7 @@ def get(username, get_data, logger, client):
 
 @users.command(name='delete',
                short_help='Delete a user [manager only]')
-@cfy.argument('username')
+@cfy.argument('username', callback=cfy.validate_name)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client()
@@ -137,3 +138,41 @@ def delete(username, logger, client):
     logger.info('Deleting user `{0}`...'.format(username))
     client.users.delete(username)
     logger.info('User removed')
+
+
+@users.command(name='activate',
+               short_help='Make an inactive user active [manager only]')
+@cfy.argument('username')
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client()
+@cfy.pass_logger
+def activate(username, logger, client):
+    """Activate a user
+
+    `USERNAME` is the username of the user
+    """
+    graceful_msg = 'User `{0}` is already active'.format(username)
+    logger.info('Activating user `{0}`...'.format(username))
+    with handle_client_error(409, graceful_msg, logger):
+        client.users.activate(username)
+        logger.info('User activated')
+
+
+@users.command(name='deactivate',
+               short_help='Make an active user inactive [manager only]')
+@cfy.argument('username')
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client()
+@cfy.pass_logger
+def deactivate(username, logger, client):
+    """Deactivate a user
+
+    `USERNAME` is the username of the user
+    """
+    graceful_msg = 'User `{0}` is already inactive'.format(username)
+    logger.info('Deactivating user `{0}`...'.format(username))
+    with handle_client_error(409, graceful_msg, logger):
+        client.users.deactivate(username)
+        logger.info('User deactivated')
