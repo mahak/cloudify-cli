@@ -524,7 +524,8 @@ class Options(object):
 
         self.profile_name = click.option(
             '--profile-name',
-            required=False)
+            required=False,
+            help=helptexts.PROFILE_NAME)
 
         self.manager_username = click.option(
             '-u',
