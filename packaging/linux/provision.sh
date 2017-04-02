@@ -28,10 +28,14 @@ install_common_prereqs &&
 rm -rf cloudify-cli
 git clone https://github.com/cloudify-cosmo/cloudify-cli.git
 cd cloudify-cli/packaging/omnibus
-git checkout ${CLI_BRANCH-$CORE_TAG_NAME}
+if [ "$CLI_BRANCH" != "master" ]; then
+    git checkout -b ${CLI_BRANCH-$CORE_TAG_NAME}
+else
+    git checkout ${CLI_BRANCH-$CORE_TAG_NAME}
+fi
 git tag -d $CORE_TAG_NAME
 NEW_TAG_NAME="${VERSION}.${PRERELEASE}"
-git -d tag $NEW_TAG_NAME
+git tag -d $NEW_TAG_NAME
 git tag $NEW_TAG_NAME
 omnibus build cloudify && result="success"
 cd pkg
@@ -42,7 +46,9 @@ rm -f version-manifest.json
 
 #remove the -1 - omnibus set the build_iteration to 1 if it null
 file=$(basename $(find . -type f -name "*.$FILEEXT"))
-file_no_build=$(echo "$file" | sed 's/\-1//')
+echo "file=$file"
+file_no_build=$(echo "$file" | sed 's/\(.*\)-1/\1/')
+echo "file_no_build=$file_no_build"
 mv $file $file_no_build
 
 [ "$result" == "success" ] && create_md5 $FILEEXT &&

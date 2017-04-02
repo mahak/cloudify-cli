@@ -212,6 +212,10 @@ RESTORE_SNAPSHOT_TENANT_NAME = 'The name of the tenant into which the ' \
                                'restoring snapshots from managers of ' \
                                'versions prior to 4.0.0. If passed when ' \
                                'restoring newer snapshots, an error ' \
+                               'will be raised. ' \
+                               'The given tenant will be created ' \
+                               'automatically. If the tenant name passed ' \
+                               'already exists on the manager, an error ' \
                                'will be raised'
 SKIP_CREDENTIALS_VALIDATION = 'Do not check that the passed credentials are ' \
                               'correct (default:False)'
@@ -229,3 +233,5 @@ GET_DATA = 'When set to True, displays the full list of connected resources ' \
            '(default:False)'
 PROFILE_NAME = 'Name of the profile to use'
 SECRET_VALUE = "The secret's value to be set"
+SECRET_STRING = "The string to use as the secret's value"
+SECRET_FILE = "The secret's file to use its content as value to be set"

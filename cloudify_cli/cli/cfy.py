@@ -769,11 +769,17 @@ class Options(object):
             help=helptexts.GET_DATA
         )
 
-        self.secret_value = click.option(
+        self.secret_string = click.option(
             '-s',
-            '--secret_value',
-            required=True,
-            help=helptexts.SECRET_VALUE)
+            '--secret-string',
+            required=False,
+            help=helptexts.SECRET_STRING)
+
+        self.secret_file = click.option(
+            '-f',
+            '--secret-file',
+            required=False,
+            help=helptexts.SECRET_FILE)
 
     @staticmethod
     def include_keys(help):
@@ -872,9 +878,9 @@ class Options(object):
     def ldap_dn_extra():
         return click.option(
             '-e',
-            '--ldap_dn_extra',
+            '--ldap-dn-extra',
             required=False,
-            help=helptexts.LDAP_IS_ACTIVE_DIRECTORY)
+            help=helptexts.LDAP_DN_EXTRA)
 
     @staticmethod
     def force(help):

@@ -163,7 +163,11 @@ def join(client,
     cluster_status = cluster_client.cluster.status()
 
     encryption_key = cluster_status.encryption_key
-    join = [n.host_ip for n in cluster_client.cluster.nodes.list()]
+    cluster_nodes = cluster_client.cluster.nodes.list()
+    if any(n.name == cluster_node_name for n in cluster_nodes):
+        raise CloudifyCliError('Node {0} is already a member of the cluster'
+                               .format(cluster_node_name))
+    join = [n.host_ip for n in cluster_nodes]
     logger.info('Joining the Cloudify Manager cluster: {0}'
                 .format(join))
 
@@ -202,11 +206,9 @@ def join(client,
             time.sleep(WAIT_FOR_EXECUTION_SLEEP_INTERVAL)
 
     _join_node_to_profile(env.profile, joined_profile=joined_profile)
-
-    logger.info('Cloudify Manager cluster joined successfully!')
-    logger.info('Switching to the cluster profile: {0}'.format(join_profile))
-
-    env.set_active_profile(join_profile)
+    _copy_cluster_profile_settings(from_profile=joined_profile,
+                                   to_profile=env.profile)
+    logger.info('Cloudify Manager joined cluster successfully.')
 
 
 @cluster.command(name='update-profile',
@@ -222,19 +224,24 @@ def update_profile(client, logger):
     will be contacted in case of a cluster master failure.
     """
     logger.info('Fetching the cluster nodes list...')
+    _update_profile_cluster_settings(env.profile, client, logger=logger)
+    logger.info('Profile is up to date with {0} nodes'
+                .format(len(env.profile.cluster)))
+
+
+def _update_profile_cluster_settings(profile, client, logger=None):
     nodes = client.cluster.nodes.list()
     stored_nodes = {node['manager_ip'] for node in env.profile.cluster}
     for node in nodes:
         if node.host_ip not in stored_nodes:
-            logger.info('Adding cluster node: {0}'.format(node.host_ip))
+            if logger:
+                logger.info('Adding cluster node: {0}'.format(node.host_ip))
             env.profile.cluster.append({
                 # currently only the host IP is received; all other parameters
                 # will be defaulted to the ones from the last used manager
                 'manager_ip': node.host_ip
             })
     env.profile.save()
-    logger.info('Profile is up to date with {0} nodes'
-                .format(len(env.profile.cluster)))
 
 
 @cluster.command(name='set-active',
@@ -345,6 +352,30 @@ def _join_node_to_profile(from_profile, joined_profile=None):
     })
     joined_profile.cluster.append(node)
     joined_profile.save()
+
+
+def _copy_cluster_profile_settings(from_profile, to_profile):
+    """After joining to the cluster, make local profile also use it.
+
+    Copy the nodes and the certs + ssh keys of the cluster, from the
+    joined-to profile.
+    """
+    for attr in ['manager_username', 'manager_password', 'manager_tenant']:
+        setattr(to_profile, attr, getattr(from_profile, attr))
+
+    for node in from_profile.cluster:
+        added_node = node.copy()
+        for file_key in ['cert', 'ssh_key']:
+            path = node.get(file_key)
+            if not path:
+                continue
+            filename = os.path.basename(path)
+            new_filename = os.path.join(to_profile.workdir, filename)
+            # use .copy2 to also preserve chmod
+            shutil.copy2(node[file_key], new_filename)
+            added_node[file_key] = new_filename
+        to_profile.cluster.append(added_node)
+    to_profile.save()
 
 
 def _display_logs(logger, logs):
