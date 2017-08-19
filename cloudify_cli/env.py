@@ -31,6 +31,7 @@ import requests
 from cloudify_rest_client import CloudifyClient
 from cloudify_rest_client.client import HTTPClient
 from cloudify_rest_client.exceptions import (CloudifyClientError,
+                                             RemovedFromCluster,
                                              NotClusterMaster)
 
 from . import constants
@@ -166,17 +167,22 @@ def is_initialized(profile_name=None):
 
 
 def get_context_path(profile_name, suppress_error=False):
+    base_dir = get_profile_dir(profile_name, suppress_error)
+    if not base_dir:
+        return
     return os.path.join(
-        get_profile_dir(profile_name, suppress_error),
+        base_dir,
         constants.CLOUDIFY_PROFILE_CONTEXT_FILE_NAME
     )
 
 
 def get_profile_dir(profile_name=None, suppress_error=False):
     active_profile = profile_name or get_active_profile()
-    if suppress_error or (active_profile and os.path.isdir(
-            os.path.join(PROFILES_DIR, active_profile))):
+    if active_profile and os.path.isdir(
+            os.path.join(PROFILES_DIR, active_profile)):
         return os.path.join(PROFILES_DIR, active_profile)
+    elif suppress_error:
+        return
     else:
         raise CloudifyCliError('Profile directory does not exist')
 
@@ -194,6 +200,7 @@ def get_rest_client(client_profile=None,
                     rest_host=None,
                     rest_port=None,
                     rest_protocol=None,
+                    rest_cert=None,
                     username=None,
                     password=None,
                     tenant_name=None,
@@ -205,6 +212,7 @@ def get_rest_client(client_profile=None,
     rest_host = rest_host or client_profile.manager_ip
     rest_port = rest_port or client_profile.rest_port
     rest_protocol = rest_protocol or client_profile.rest_protocol
+    rest_cert = rest_cert or get_ssl_cert(client_profile)
     username = username or get_username(client_profile)
     password = password or get_password(client_profile)
     tenant_name = tenant_name or get_tenant_name(client_profile)
@@ -219,14 +227,13 @@ def get_rest_client(client_profile=None,
     if not password:
         raise CloudifyCliError('Command failed: Missing password')
 
-    cert = get_ssl_cert()
     if cluster:
         client = CloudifyClusterClient(
             host=rest_host,
             port=rest_port,
             protocol=rest_protocol,
             headers=headers,
-            cert=cert,
+            cert=rest_cert,
             trust_all=trust_all,
             profile=client_profile)
 
@@ -236,7 +243,7 @@ def get_rest_client(client_profile=None,
             port=rest_port,
             protocol=rest_protocol,
             headers=headers,
-            cert=cert,
+            cert=rest_cert,
             trust_all=trust_all)
 
     # TODO: Put back version check after we've solved the problem where
@@ -264,6 +271,11 @@ def build_manager_host_string(ssh_user='', ip=''):
                                'in Cloudify CLI settings')
     ip = ip or profile.manager_ip
     return '{0}@{1}'.format(ssh_user, ip)
+
+
+def get_default_rest_cert_local_path():
+    base_dir = get_profile_dir(suppress_error=True) or CLOUDIFY_WORKDIR
+    return os.path.join(base_dir, constants.PUBLIC_REST_CERT)
 
 
 def get_username(from_profile=None):
@@ -305,23 +317,27 @@ def get_tenant_name(from_profile=None):
     return tenant or from_profile.manager_tenant
 
 
-def get_default_rest_cert_local_path():
-    return os.path.join(
-        CLOUDIFY_WORKDIR,
-        constants.PUBLIC_REST_CERT
-    )
-
-
-def get_ssl_cert():
+def get_ssl_cert(from_profile=None):
     """Return the path to a local copy of the manager's public certificate.
 
-    :return: If the LOCAL_REST_CERT_FILE env var was set by the user - use it,
+    :return: If the LOCAL_REST_CERT_FILE env var was set by the user *or* if
+    `rest_certificate` is set in the profile - use it,
     If it wasn't set, check if the certificate file is found in its default
     location. If so - use it, otherwise - return None
+    Note that if it is set in both profile and env var - an error will be
+    raised
     """
-    if os.environ.get(constants.LOCAL_REST_CERT_FILE):
-        return os.environ.get(constants.LOCAL_REST_CERT_FILE)
-
+    if from_profile is None:
+        from_profile = profile
+    cert = os.environ.get(constants.LOCAL_REST_CERT_FILE)
+    if cert and from_profile.rest_certificate:
+        raise CloudifyCliError('Rest Certificate is set in profile *and* in '
+                               'the `LOCAL_REST_CERT_FILE` env variable. '
+                               'Resolve the conflict before continuing.\n'
+                               'Either unset the env variable, or run '
+                               '`cfy profiles unset --rest_certificate`')
+    if cert or from_profile.rest_certificate:
+        return cert or from_profile.rest_certificate
     default_cert_file = get_default_rest_cert_local_path()
     return default_cert_file if os.path.isfile(default_cert_file) else None
 
@@ -385,6 +401,7 @@ class ProfileContext(yaml.YAMLObject):
         self.manager_tenant = None
         self.rest_port = constants.DEFAULT_REST_PORT
         self.rest_protocol = constants.DEFAULT_REST_PROTOCOL
+        self.rest_certificate = None
         self._cluster = []
 
     def to_dict(self):
@@ -400,6 +417,7 @@ class ProfileContext(yaml.YAMLObject):
             manager_tenant=self.manager_tenant,
             rest_port=self.rest_port,
             rest_protocol=self.rest_protocol,
+            rest_certificate=self.rest_certificate,
             cluster=self.cluster
         )
 
@@ -521,7 +539,8 @@ class ClusterHTTPClient(HTTPClient):
             try:
                 return super(ClusterHTTPClient, self).do_request(*args,
                                                                  **kwargs)
-            except (NotClusterMaster, requests.exceptions.ConnectionError):
+            except (RemovedFromCluster, NotClusterMaster,
+                    requests.exceptions.ConnectionError):
                 continue
 
         raise CloudifyClientError('No active node in the cluster!')

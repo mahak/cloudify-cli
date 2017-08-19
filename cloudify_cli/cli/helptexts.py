@@ -158,7 +158,9 @@ MANAGER_USERNAME = 'Manager username used to run commands on the manager'
 MANAGER_PASSWORD = 'Manager password used to run commands on the manager'
 MANAGER_TENANT = 'The tenant associated with the current user operating the ' \
                  'manager'
+SSL_STATE = 'Required SSL state (on/off)'
 REST_PORT = "The REST server's port"
+REST_CERT = "The REST server's external certificate file location"
 
 EXPORT_SSH_KEYS = 'Include ssh key files in archive'
 IMPORT_SSH_KEYS = 'WARNING: Import exported keys to their original locations'
@@ -166,8 +168,6 @@ IMPORT_SSH_KEYS = 'WARNING: Import exported keys to their original locations'
 SORT_BY = "Key for sorting the list"
 DESCENDING = "Sort list in descending order [default: False]"
 
-INSTALL_SCRIPT_LOCATION = \
-    'Alternative location of the `install_agents.py` script'
 TENANT = 'The name of the tenant'
 TENANT_TEMPLATE = 'The name of the tenant of the {0}'
 TENANT_LIST_TEMPLATE = 'The name of the tenant to list {0}s from'
