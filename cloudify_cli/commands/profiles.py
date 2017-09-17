@@ -84,7 +84,7 @@ def list(logger):
     current_profile = env.get_active_profile()
 
     profiles = []
-    profile_names = _get_profile_names()
+    profile_names = env.get_profile_names()
     for profile in profile_names:
         profile_data = _get_profile(profile)
         if profile == current_profile:
@@ -115,6 +115,7 @@ def list(logger):
 @cfy.options.manager_tenant
 @cfy.options.rest_port
 @cfy.options.rest_certificate
+@cfy.options.skip_credentials_validation
 @cfy.options.verbose()
 @cfy.pass_logger
 def use(manager_ip,
@@ -127,6 +128,7 @@ def use(manager_ip,
         profile_name,
         rest_port,
         rest_certificate,
+        skip_credentials_validation,
         logger):
     """Control a specific manager
 
@@ -153,7 +155,8 @@ def use(manager_ip,
         rest_certificate,
         manager_username,
         manager_password,
-        manager_tenant
+        manager_tenant,
+        skip_credentials_validation
     )
     # First, attempt to get the provider from the manager - should it fail,
     # the manager's profile directory won't be created
@@ -165,8 +168,10 @@ def use(manager_ip,
         rest_certificate,
         manager_username,
         manager_password,
-        manager_tenant
+        manager_tenant,
+        skip_credentials_validation
     )
+
     if not env.is_profile_exists(profile_name):
         init.init_manager_profile(profile_name=profile_name)
 
@@ -202,7 +207,7 @@ def purge_incomplete(logger):
     """Purge all profiles for which the bootstrap state is incomplete
     """
     logger.info('Purging incomplete bootstrap profiles...')
-    profile_names = _get_profile_names()
+    profile_names = env.get_profile_names()
     for profile in profile_names:
         context = env.get_profile_context(profile)
         if context.bootstrap_state == 'Incomplete':
@@ -411,7 +416,7 @@ def export_profiles(include_keys, output_path, logger):
     # TODO: Copy exported ssh keys to each profile's directory
     logger.info('Exporting profiles to {0}...'.format(destination))
     if include_keys:
-        for profile in _get_profile_names():
+        for profile in env.get_profile_names():
             _backup_ssh_key(profile)
     utils.tar(env.PROFILES_DIR, destination)
     if include_keys:
@@ -443,7 +448,7 @@ def import_profiles(archive_path, include_keys, logger):
     utils.untar(archive_path, os.path.dirname(env.PROFILES_DIR))
 
     if include_keys:
-        for profile in _get_profile_names():
+        for profile in env.get_profile_names():
             _restore_ssh_key(profile)
     else:
         if EXPORTED_KEYS_DIRNAME in os.listdir(env.PROFILES_DIR):
@@ -457,7 +462,7 @@ def import_profiles(archive_path, include_keys, logger):
 
 
 def _assert_profiles_exist():
-    if not _get_profile_names():
+    if not env.get_profile_names():
         raise CloudifyCliError('No profiles to export')
 
 
@@ -472,16 +477,6 @@ def _assert_profiles_archive(archive_path):
 def _assert_is_tarfile(archive_path):
     if not tarfile.is_tarfile(archive_path):
         raise CloudifyCliError('The archive provided must be a tar.gz archive')
-
-
-def _get_profile_names():
-    # TODO: This is too.. ambiguous. We should change it so there are
-    # no exclusions.
-    excluded = ['local', EXPORTED_KEYS_DIRNAME]
-    profile_names = [item for item in os.listdir(env.PROFILES_DIR)
-                     if item not in excluded]
-
-    return profile_names
 
 
 def _backup_ssh_key(profile):
@@ -553,18 +548,24 @@ def _get_provider_context(profile_name,
                           rest_certificate,
                           manager_username,
                           manager_password,
-                          manager_tenant):
+                          manager_tenant,
+                          skip_credentials_validation):
+    try:
+        client = _get_client_and_assert_manager(
+            profile_name,
+            manager_ip,
+            rest_port,
+            rest_protocol,
+            rest_certificate,
+            manager_username,
+            manager_password,
+            manager_tenant
+        )
+    except CloudifyCliError:
+        if skip_credentials_validation:
+            return None
+        raise
 
-    client = _get_client_and_assert_manager(
-        profile_name,
-        manager_ip,
-        rest_port,
-        rest_protocol,
-        rest_certificate,
-        manager_username,
-        manager_password,
-        manager_tenant
-    )
     try:
         response = client.manager.get_context()
         return response['context']
@@ -646,7 +647,8 @@ def _get_rest_port_and_protocol(profile_name=None,
                                 rest_certificate=None,
                                 manager_username=None,
                                 manager_password=None,
-                                manager_tenant=None):
+                                manager_tenant=None,
+                                skip_credentials_validation=False):
 
     # Determine SSL mode by port
     if rest_port == constants.SECURED_REST_PORT:
@@ -673,8 +675,9 @@ def _get_rest_port_and_protocol(profile_name=None,
     except UserUnauthorizedError as e:
         if e.response is not None and _is_manager_secured(e.response.history):
             return constants.SECURED_REST_PORT, constants.SECURED_REST_PROTOCOL
-    except CloudifyClientError as e:
-        raise
+    except Exception as e:
+        if not skip_credentials_validation:
+            raise
 
     return rest_port, constants.DEFAULT_REST_PROTOCOL
 

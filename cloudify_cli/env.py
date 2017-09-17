@@ -90,6 +90,16 @@ def get_active_profile():
         return None
 
 
+def get_profile_names():
+    # TODO: This is too.. ambiguous. We should change it so there are
+    # no exclusions.
+    excluded = ['local']
+    profile_names = [item for item in os.listdir(PROFILES_DIR)
+                     if item not in excluded and not item.startswith('.')]
+
+    return profile_names
+
+
 def assert_manager_active():
     if not is_manager_active():
         raise CloudifyCliError(
@@ -226,6 +236,14 @@ def get_rest_client(client_profile=None,
 
     if not password:
         raise CloudifyCliError('Command failed: Missing password')
+
+    if rest_protocol == constants.SECURED_REST_PROTOCOL and \
+            (not rest_cert or not os.path.isfile(rest_cert)):
+        raise CloudifyCliError('Command failed: Trying to work with https '
+                               'protocol without certificate. Make sure '
+                               '`rest_certificate` is defined in your profile '
+                               'to be the path to the valid rest public '
+                               'certificate file')
 
     if cluster:
         client = CloudifyClusterClient(
