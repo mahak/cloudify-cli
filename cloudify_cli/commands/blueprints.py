@@ -32,12 +32,15 @@ from .. import blueprint
 from .. import exceptions
 from ..config import config
 from ..table import print_data
+from ..constants import RESOURCE_LABELS
 from ..exceptions import CloudifyCliError
+from ..utils import prettify_client_error
 
 
 DESCRIPTION_LIMIT = 20
 BLUEPRINT_COLUMNS = ['id', 'description', 'main_file_name', 'created_at',
-                     'updated_at', 'permission', 'tenant_name', 'created_by']
+                     'updated_at', 'resource_availability', 'tenant_name',
+                     'created_by']
 INPUTS_COLUMNS = ['name', 'type', 'default', 'description']
 
 
@@ -232,7 +235,10 @@ def list(sort_by, descending, tenant_name, all_tenants, logger, client):
     logger.info('Listing all blueprints...')
     blueprints = [trim_description(b) for b in client.blueprints.list(
         sort=sort_by, is_descending=descending, _all_tenants=all_tenants)]
-    print_data(BLUEPRINT_COLUMNS, blueprints, 'Blueprints:')
+    print_data(BLUEPRINT_COLUMNS,
+               blueprints,
+               'Blueprints:',
+               labels=RESOURCE_LABELS)
 
 
 @blueprints.command(name='get',
@@ -256,7 +262,11 @@ def get(blueprint_id, logger, client, tenant_name):
                                           blueprint_id=blueprint_id)
     blueprint_dict['#deployments'] = len(deployments)
     columns = BLUEPRINT_COLUMNS + ['#deployments']
-    print_data(columns, blueprint_dict, 'Blueprint:', max_width=50)
+    print_data(columns,
+               blueprint_dict,
+               'Blueprint:',
+               max_width=50,
+               labels=RESOURCE_LABELS)
 
     logger.info('Description:')
     logger.info('{0}\n'.format(blueprint_dict['description'] or ''))
@@ -370,3 +380,21 @@ def install_plugins(blueprint_path, logger):
     """
     logger.info('Installing plugins...')
     local._install_plugins(blueprint_path=blueprint_path)
+
+
+@blueprints.command(name='set-global',
+                    short_help="Set the blueprint's availability to global")
+@cfy.argument('blueprint-id')
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client(use_tenant_in_header=True)
+@cfy.pass_logger
+def set_global(blueprint_id, logger, client):
+    """Set the blueprint's availability to global
+
+    `BLUEPRINT_ID` is the id of the blueprint to set global
+    """
+    status_codes = [400, 403, 404]
+    with prettify_client_error(status_codes, logger):
+        client.blueprints.set_global(blueprint_id)
+        logger.info('Blueprint `{0}` was set to global'.format(blueprint_id))

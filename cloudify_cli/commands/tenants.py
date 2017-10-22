@@ -71,22 +71,51 @@ def create(tenant_name, logger, client):
 @tenants.command(name='add-user',
                  short_help='Add a user to a tenant [manager only]')
 @cfy.argument('username', callback=cfy.validate_name)
+@cfy.options.user_role()
 @cfy.options.tenant_name(show_default_in_help=False)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
-def add_user(username, tenant_name, logger, client):
+def add_user(username, tenant_name, role, logger, client):
     """Add a user to a tenant
 
     `USERNAME` is the name of the user to add to the tenant
     """
-    graceful_msg = 'User `{0}` is already associated with ' \
-                   'tenant `{1}`'.format(username, tenant_name)
+    graceful_msg = (
+        'User `{0}` is already associated with tenant `{1}`'
+        .format(username, tenant_name)
+    )
     with handle_client_error(409, graceful_msg, logger):
-        client.tenants.add_user(username, tenant_name)
-        logger.info('User `{0}` added successfully to tenant '
-                    '`{1}`'.format(username, tenant_name))
+        client.tenants.add_user(username, tenant_name, role)
+        logger.info(
+            'User `{0}` added successfully to tenant `{1}`'
+            .format(username, tenant_name)
+        )
+
+
+@tenants.command(
+    name='update-user',
+    short_help='Update user-tenant relationship [manager only]')
+@cfy.argument('username', callback=cfy.validate_name)
+@cfy.options.user_role(required=True)
+@cfy.options.tenant_name(show_default_in_help=False)
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client(use_tenant_in_header=False)
+@cfy.pass_logger
+def update_user(username, tenant_name, role, logger, client):
+    """Update user-tenant relationship."""
+    not_found_msg = (
+        'User `{0}` is *not* currently associated to tenant `{1}`'
+        .format(username, tenant_name)
+    )
+    with handle_client_error(404, not_found_msg, logger):
+        client.tenants.update_user(username, tenant_name, role)
+        logger.info(
+            'User `{0}` updated successfully in tenant `{1}`'
+            .format(username, tenant_name)
+        )
 
 
 @tenants.command(name='remove-user',
@@ -113,22 +142,51 @@ def remove_user(username, tenant_name, logger, client):
 @tenants.command(name='add-user-group',
                  short_help='Add a user group to a tenant [manager only]')
 @cfy.argument('user-group-name', callback=cfy.validate_name)
+@cfy.options.group_role()
 @cfy.options.tenant_name(show_default_in_help=False)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client(use_tenant_in_header=False)
 @cfy.pass_logger
-def add_group(user_group_name, tenant_name, logger, client):
+def add_group(user_group_name, tenant_name, role, logger, client):
     """Add a user group to a tenant
 
     `USER_GROUP_NAME` is the name of the user group to add to the tenant
     """
-    graceful_msg = 'User group `{0}` is already associated with ' \
-                   'tenant `{1}`'.format(user_group_name, tenant_name)
+    graceful_msg = (
+        'User group `{0}` is already associated with tenant `{1}`'
+        .format(user_group_name, tenant_name)
+    )
     with handle_client_error(409, graceful_msg, logger):
-        client.tenants.add_group(user_group_name, tenant_name)
-        logger.info('User group `{0}` added successfully to tenant '
-                    '`{1}`'.format(user_group_name, tenant_name))
+        client.tenants.add_group(user_group_name, tenant_name, role)
+        logger.info(
+            'User group `{0}` added successfully to tenant `{1}`'
+            .format(user_group_name, tenant_name)
+        )
+
+
+@tenants.command(
+    name='update-group',
+    short_help='Update group-tenant relationship [manager only]')
+@cfy.argument('user-group-name', callback=cfy.validate_name)
+@cfy.options.group_role(required=True)
+@cfy.options.tenant_name(show_default_in_help=False)
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client(use_tenant_in_header=False)
+@cfy.pass_logger
+def update_group(user_group_name, tenant_name, role, logger, client):
+    """Update group-tenant relationship."""
+    not_found_msg = (
+        'User `{0}` is *not* currently associated to tenant `{1}`'
+        .format(user_group_name, tenant_name)
+    )
+    with handle_client_error(404, not_found_msg, logger):
+        client.tenants.update_group(user_group_name, tenant_name, role)
+        logger.info(
+            'Group `{0}` updated successfully in tenant `{1}`'
+            .format(user_group_name, tenant_name)
+        )
 
 
 @tenants.command(name='remove-user-group',

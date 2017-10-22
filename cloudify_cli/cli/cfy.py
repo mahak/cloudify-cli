@@ -635,8 +635,14 @@ class Options(object):
         self.rest_port = click.option(
             '--rest-port',
             required=False,
-            default=constants.DEFAULT_REST_PORT,
             help=helptexts.REST_PORT)
+
+        self.ssl_rest = click.option(
+            '--ssl',
+            is_flag=True,
+            required=False,
+            default=False,
+            help=helptexts.SSL_REST)
 
         self.init_hard_reset = click.option(
             '--hard',
@@ -756,8 +762,7 @@ class Options(object):
             '-r',
             '--security-role',
             required=False,
-            type=click.Choice(['admin', 'user']),
-            default='user',
+            default='default',
             help=helptexts.SECURITY_ROLE)
 
         self.password = click.option(
@@ -1049,6 +1054,24 @@ class Options(object):
             '--blueprint-path',
             required=required,
             type=click.Path(exists=True))
+
+    @staticmethod
+    def user_role(required=False):
+        return click.option(
+            '-r',
+            '--role',
+            required=required,
+            help=helptexts.USER_ROLE,
+        )
+
+    @staticmethod
+    def group_role(required=False):
+        return click.option(
+            '-r',
+            '--role',
+            required=required,
+            help=helptexts.GROUP_ROLE,
+        )
 
 
 options = Options()

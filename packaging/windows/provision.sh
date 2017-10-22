@@ -29,6 +29,14 @@ function download_wheels() {
     https://github.com/cloudify-cosmo/cloudify-script-plugin/archive/1.5.1.zip#egg=cloudify-script-plugin \
     https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.5.1.zip#egg=cloudify-fabric-plugin
 
+    # Rename "Bad" wheels
+    pushd packaging/source/wheels
+        for file in *cp27m*; do
+            a="$(echo $file | sed s/-cp27m-/-none-/)"
+            mv -v "$file" "$a"
+        done
+    popd
+
 }
 
 function download_resources() {
@@ -52,7 +60,7 @@ function download_resources() {
 
     # Downloading types.yaml
     pushd packaging/source/types
-        curl -LO http://getcloudify.org.s3.amazonaws.com/spec/cloudify/${CORE_BRANCH}/types.yaml
+        curl -LO http://www.getcloudify.org/spec/cloudify/${CORE_TAG_NAME}/types.yaml
     popd
 
     # Downloading Scripts

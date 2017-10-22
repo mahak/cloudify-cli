@@ -160,6 +160,7 @@ MANAGER_TENANT = 'The tenant associated with the current user operating the ' \
                  'manager'
 SSL_STATE = 'Required SSL state (on/off)'
 REST_PORT = "The REST server's port"
+SSL_REST = "Connect to REST server using SSL"
 REST_CERT = "The REST server's external certificate file location"
 
 EXPORT_SSH_KEYS = 'Include ssh key files in archive'
@@ -177,9 +178,12 @@ ALL_TENANTS = 'Include resources from all tenants associated with the user. ' \
 GROUP = 'The name of the user group'
 GROUP_DN = 'The ldap group\'s distinguished name. This option is required ' \
            'when using ldap'
+GROUP_ROLE = (
+    'Role assigned to the users of group in the context of the tenant.'
+)
 
 SECURITY_ROLE = "A role to determine the user's permissions on the manager " \
-                "(default: user)"
+                "(default: default)"
 PASSWORD = 'Cloudify manager password'
 
 CLUSTER_HOST_IP = \
@@ -204,6 +208,7 @@ SKIP_PLUGINS_VALIDATION = 'Determines whether to validate if the' \
 
 USER = 'Username of user to whom the permissions apply. ' \
        'This argument can be used multiple times'
+USER_ROLE = 'Role assigned to user in the context of the tenant.'
 PERMISSION = 'The permission applicable to a resource [viewer|owner] ' \
              '(default:viewer)'
 RESTORE_CERTIFICATES = 'Restore the certificates from the snapshot, using ' \
