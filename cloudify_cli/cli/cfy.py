@@ -803,6 +803,13 @@ class Options(object):
             help=helptexts.SKIP_PLUGINS_VALIDATION
         )
 
+        self.skip_plugins_upload_validation = click.option(
+            '--skip-local-plugins-validation',
+            is_flag=True,
+            default=False,
+            help=helptexts.SKIP_PLUGINS_UPLOAD_VALIDATION
+        )
+
         self.users = click.option(
             '-u',
             '--users',
@@ -1056,22 +1063,23 @@ class Options(object):
             type=click.Path(exists=True))
 
     @staticmethod
-    def user_role(required=False):
+    def tenant_role(help_text, required=False):
         return click.option(
             '-r',
             '--role',
             required=required,
-            help=helptexts.USER_ROLE,
+            help=help_text
         )
 
     @staticmethod
-    def group_role(required=False):
-        return click.option(
-            '-r',
-            '--role',
-            required=required,
-            help=helptexts.GROUP_ROLE,
-        )
+    def user_tenant_role():
+        return Options.tenant_role(
+            helptexts.USER_TENANT_ROLE, required=True)
+
+    @staticmethod
+    def group_tenant_role():
+        return Options.tenant_role(
+            helptexts.GROUP_TENANT_ROLE, required=True)
 
 
 options = Options()
