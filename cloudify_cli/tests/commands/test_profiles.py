@@ -348,3 +348,35 @@ class ProfilesTest(CliCommandTest):
         added_profile = env.get_profile_context('5.6.7.8')
         self.assertEqual('1.2.3.4', added_profile.manager_ip)
         self.assertEqual('5.6.7.8', added_profile.profile_name)
+
+    @patch('cloudify_cli.commands.profiles._get_provider_context',
+           return_value={})
+    def test_use_cannot_update_profile(self, *_):
+        self.use_manager()
+        outcome = self.invoke('profiles use 10.10.1.10 -p abc')
+        self.assertIn('The passed in options are ignored: manager_password',
+                      outcome.logs)
+
+    @patch('cloudify_cli.commands.profiles._get_provider_context',
+           return_value={})
+    def test_use_existing_only_switches(self, mock_get_context):
+        self.use_manager()
+        self.invoke('profiles use 10.10.1.10')
+        self.assertFalse(mock_get_context.called)
+
+    @patch('cloudify_cli.commands.profiles._get_provider_context',
+           return_value={})
+    def test_cluster_set_changes_cert(self, mock_get_context):
+        self.use_manager()
+        env.profile.cluster = [{'name': 'first'}]
+        self.invoke('profiles set-cluster first --rest-certificate CERT_PATH')
+        self.assertIn('cert', env.profile.cluster[0])
+        self.assertEqual(env.profile.cluster[0]['cert'], 'CERT_PATH')
+
+    @patch('cloudify_cli.commands.profiles._get_provider_context',
+           return_value={})
+    def test_cluster_set_nonexistent_node(self, mock_get_context):
+        self.use_manager()
+        env.profile.cluster = [{'name': 'first'}]
+        self.invoke('profiles set-cluster second --rest-certificate CERT_PATH',
+                    err_str_segment='second not found')

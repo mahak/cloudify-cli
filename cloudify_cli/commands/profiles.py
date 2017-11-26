@@ -120,18 +120,10 @@ def list(logger):
 @cfy.options.verbose()
 @cfy.pass_logger
 def use(manager_ip,
-        ssh_user,
-        ssh_key,
-        ssh_port,
-        manager_username,
-        manager_password,
-        manager_tenant,
         profile_name,
-        rest_port,
-        ssl,
-        rest_certificate,
         skip_credentials_validation,
-        logger):
+        logger,
+        **kwargs):
     """Control a specific manager
 
     `PROFILE_NAME` can be either a manager IP or `local`.
@@ -148,6 +140,49 @@ def use(manager_ip,
         env.set_active_profile('local')
         return
 
+    if env.is_profile_exists(profile_name):
+        _switch_profile(
+            manager_ip=manager_ip,
+            profile_name=profile_name,
+            logger=logger,
+            **kwargs)
+    else:
+        _create_profile(
+            manager_ip=manager_ip,
+            profile_name=profile_name,
+            skip_credentials_validation=skip_credentials_validation,
+            logger=logger,
+            **kwargs)
+
+
+def _switch_profile(manager_ip, profile_name, logger, **kwargs):
+    # if using an existing profile, it is an error to provide any --option,
+    # because the way to update an existing profile is `cfy profiles set`
+    provided_options = [key for key, value in kwargs.items() if value]
+    if any(provided_options):
+        logger.warning('Profile {0} already exists. '
+                       'The passed in options are ignored: {1}. '
+                       'To update the profile, use `cfy profiles set`'
+                       .format(profile_name, ', '.join(provided_options)))
+
+    env.set_active_profile(profile_name)
+    logger.info('Using manager {0}'.format(profile_name))
+
+
+def _create_profile(
+        manager_ip,
+        profile_name,
+        ssh_user,
+        ssh_key,
+        ssh_port,
+        manager_username,
+        manager_password,
+        manager_tenant,
+        rest_port,
+        ssl,
+        rest_certificate,
+        skip_credentials_validation,
+        logger):
     rest_protocol = constants.SECURED_REST_PROTOCOL if ssl else \
         constants.DEFAULT_REST_PROTOCOL
 
@@ -173,9 +208,7 @@ def use(manager_ip,
         skip_credentials_validation
     )
 
-    if not env.is_profile_exists(profile_name):
-        init.init_manager_profile(profile_name=profile_name)
-
+    init.init_manager_profile(profile_name=profile_name)
     env.set_active_profile(profile_name)
 
     logger.info('Using manager {0} with port {1}'.format(
@@ -321,7 +354,7 @@ def set_profile(profile_name,
 @cfy.options.manager_tenant
 @cfy.options.ssh_user
 @cfy.options.ssh_key
-@cfy.options.ssh_port_no_default
+@cfy.options.ssh_port
 @cfy.options.ssl_state
 @cfy.options.rest_certificate
 @cfy.options.skip_credentials_validation
@@ -349,6 +382,57 @@ def set_cmd(profile_name,
                        rest_certificate,
                        skip_credentials_validation,
                        logger)
+
+
+@profiles.command(
+    name='set-cluster',
+    short_help='Set connection options for a cluster node')
+@cfy.argument('cluster-node-name')
+@cfy.options.ssh_user
+@cfy.options.ssh_key
+@cfy.options.ssh_port
+@cfy.options.rest_certificate
+@cfy.pass_logger
+def set_cluster(cluster_node_name,
+                ssh_user,
+                ssh_key,
+                ssh_port,
+                rest_certificate,
+                logger):
+    """Set connection options for a cluster node.
+
+    `CLUSTER_NODE_NAME` is the name of the cluster node to set options for.
+    """
+    if not env.profile.cluster:
+        err = CloudifyCliError('The current profile is not a cluster profile!')
+        err.possible_solutions = [
+            "Select a different profile using `cfy profiles use`",
+            "Run `cfy cluster update-profile`"
+        ]
+        raise err
+
+    changed_node = None
+    for node in env.profile.cluster:
+        if node['name'] == cluster_node_name:
+            changed_node = node
+            break
+    else:
+        raise CloudifyCliError(
+            'Node {0} not found in the cluster'.format(cluster_node_name))
+
+    for source, target, label in [
+        (ssh_user, 'ssh_user', 'ssh user'),
+        (ssh_key, 'ssh_key', 'ssh key'),
+        (ssh_port, 'ssh_port', 'ssh port'),
+        (rest_certificate, 'cert', 'rest certificate'),
+    ]:
+        if source:
+            changed_node[target] = source
+            logger.info('Node {0}: setting {1} to `{2}`'
+                        .format(cluster_node_name, label, source))
+
+    env.profile.save()
+    logger.info('Settings saved successfully')
 
 
 @profiles.command(
@@ -649,8 +733,6 @@ def _set_profile_context(profile_name,
         profile.ssh_key = ssh_key
     if ssh_user:
         profile.ssh_user = ssh_user
-    if ssh_port:
-        profile.ssh_port = ssh_port
     if rest_port:
         profile.rest_port = rest_port
     if manager_username:
@@ -659,6 +741,7 @@ def _set_profile_context(profile_name,
         profile.manager_password = manager_password
     if manager_tenant:
         profile.manager_tenant = manager_tenant
+    profile.ssh_port = ssh_port or constants.REMOTE_EXECUTION_PORT
     profile.rest_protocol = rest_protocol
     profile.rest_certificate = rest_certificate
     profile.bootstrap_state = 'Complete'
