@@ -6,6 +6,7 @@ from cloudify_rest_client import deployments, executions, blueprints
 from cloudify_rest_client.exceptions import CloudifyClientError, \
     MissingRequiredDeploymentInputError, UnknownDeploymentInputError
 
+from cloudify_cli.exceptions import CloudifyCliError
 from cloudify_cli.constants import DEFAULT_TENANT_NAME
 
 from ... import exceptions
@@ -346,6 +347,67 @@ class DeploymentsTest(CliCommandTest):
              'input3': 'value3'},
             ['Unable to create deployment']
         )
+
+    def test_deployments_set_visibility(self):
+        self.client.deployments.set_visibility = MagicMock()
+        self.invoke('cfy deployments set-visibility a-deployment-id -y '
+                    'tenant')
+
+    def test_deployments_set_visibility_invalid_argument(self):
+        self.invoke(
+            'cfy deployments set-visibility a-deployment-id -y private',
+            err_str_segment='Invalid visibility: `private`',
+            exception=CloudifyCliError
+        )
+        self.invoke(
+            'cfy deployments set-visibility a-deployment-id -y global',
+            err_str_segment='Invalid visibility: `global`',
+            exception=CloudifyCliError
+        )
+        self.invoke(
+            'cfy deployments set-visibility a-deployment-id -y bla',
+            err_str_segment='Invalid visibility: `bla`',
+            exception=CloudifyCliError
+        )
+
+    def test_deployments_set_visibility_missing_argument(self):
+        outcome = self.invoke(
+            'cfy deployments set-visibility a-deployment-id',
+            err_str_segment='2',
+            exception=SystemExit
+        )
+        self.assertIn('Missing option "-y" / "--visibility"', outcome.output)
+
+    def test_deployments_set_visibility_wrong_argument(self):
+        outcome = self.invoke(
+            'cfy deployments set-visibility a-deployment-id -g',
+            err_str_segment='2',  # Exit code
+            exception=SystemExit
+        )
+        self.assertIn('Error: no such option: -g', outcome.output)
+
+    def test_deployments_create_mutually_exclusive_arguments(self):
+        outcome = self.invoke(
+            'cfy deployments create deployment -b a-blueprint-id -y tenant '
+            '--private-resource',
+            err_str_segment='2',  # Exit code
+            exception=SystemExit
+        )
+        self.assertIn('mutually exclusive with arguments:', outcome.output)
+
+    def test_deployments_create_invalid_argument(self):
+        self.invoke(
+            'cfy deployments create deployment -b a-blueprint-id -y bla'
+            .format(BLUEPRINTS_DIR),
+            err_str_segment='Invalid visibility: `bla`',
+            exception=CloudifyCliError
+        )
+
+    def test_deployments_create_with_visibility(self):
+        self.client.deployments.create = MagicMock()
+        self.invoke('cfy deployments create deployment -b a-blueprint-id '
+                    '-y private'
+                    .format(SAMPLE_ARCHIVE_PATH))
 
     def _test_deployment_inputs(self, exception_type,
                                 inputs, expected_outputs=None):

@@ -16,12 +16,15 @@
 
 import wagon
 
+from cloudify_rest_client.constants import VISIBILITY_EXCEPT_PRIVATE
+
 from .. import utils
 from ..table import print_data
 from ..cli import helptexts, cfy
 from ..constants import RESOURCE_LABELS
-from ..utils import prettify_client_error
-
+from ..utils import (prettify_client_error,
+                     get_visibility,
+                     validate_visibility)
 
 PLUGIN_COLUMNS = ['id', 'package_name', 'package_version', 'distribution',
                   'supported_platform', 'distribution_release', 'uploaded_at',
@@ -82,14 +85,20 @@ def delete(plugin_id, force, logger, client, tenant_name):
                  short_help='Upload a plugin [manager only]')
 @cfy.argument('plugin-path')
 @cfy.options.private_resource
+@cfy.options.visibility()
 @cfy.options.verbose()
 @cfy.options.tenant_name(required=False, resource_name_for_help='plugin')
 @cfy.pass_context
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def upload(ctx, plugin_path, private_resource,
-           logger, client, tenant_name):
+def upload(ctx,
+           plugin_path,
+           private_resource,
+           visibility,
+           logger,
+           client,
+           tenant_name):
     """Upload a plugin to the manager
 
     `PLUGIN_PATH` is the path to wagon archive to upload.
@@ -100,9 +109,10 @@ def upload(ctx, plugin_path, private_resource,
         logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
 
     progress_handler = utils.generate_progress_handler(plugin_path, '')
+    visibility = get_visibility(private_resource, visibility, logger)
     logger.info('Uploading plugin {0}...'.format(plugin_path))
     plugin = client.plugins.upload(plugin_path,
-                                   private_resource,
+                                   visibility,
                                    progress_handler)
     logger.info("Plugin uploaded. The plugin's id is {0}".format(plugin.id))
 
@@ -188,14 +198,14 @@ def _transform_plugin_response(plugin):
 
 
 @plugins.command(name='set-global',
-                 short_help="Set the plugin's availability to global")
+                 short_help="Set the plugin's visibility to global")
 @cfy.argument('plugin-id')
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client(use_tenant_in_header=True)
 @cfy.pass_logger
 def set_global(plugin_id, logger, client):
-    """Set the plugin's availability to global
+    """Set the plugin's visibility to global
 
     `PLUGIN_ID` is the id of the plugin to set global
     """
@@ -203,3 +213,26 @@ def set_global(plugin_id, logger, client):
     with prettify_client_error(status_codes, logger):
         client.plugins.set_global(plugin_id)
         logger.info('Plugin `{0}` was set to global'.format(plugin_id))
+        logger.info("This command will be deprecated soon, please use the "
+                    "'set-visibility' command instead")
+
+
+@plugins.command(name='set-visibility',
+                 short_help="Set the plugin's visibility")
+@cfy.argument('plugin-id')
+@cfy.options.visibility(required=True, valid_values=VISIBILITY_EXCEPT_PRIVATE)
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client(use_tenant_in_header=True)
+@cfy.pass_logger
+def set_visibility(plugin_id, visibility, logger, client):
+    """Set the plugin's visibility
+
+    `PLUGIN_ID` is the id of the plugin to update
+    """
+    validate_visibility(visibility, valid_values=VISIBILITY_EXCEPT_PRIVATE)
+    status_codes = [400, 403, 404]
+    with prettify_client_error(status_codes, logger):
+        client.plugins.set_visibility(plugin_id, visibility)
+        logger.info('Plugin `{0}` was set to {1}'.format(plugin_id,
+                                                         visibility))

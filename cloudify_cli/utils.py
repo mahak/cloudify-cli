@@ -32,6 +32,7 @@ from .logger import get_logger
 from .exceptions import CloudifyCliError
 from .constants import SUPPORTED_ARCHIVE_TYPES
 
+from cloudify_rest_client.constants import VisibilityState
 from cloudify_rest_client.exceptions import CloudifyClientError
 
 
@@ -283,3 +284,25 @@ def prettify_client_error(status_codes, logger):
         if e.status_code not in status_codes:
             raise
         logger.info(e.message)
+
+
+def get_visibility(private_resource,
+                   visibility,
+                   logger,
+                   valid_values=VisibilityState.STATES):
+    # These arguments are mutually exclusive so only one can be used
+    if private_resource:
+        logger.info("The 'private_resource' argument will be deprecated soon, "
+                    "please use the 'visibility' argument instead")
+        return VisibilityState.PRIVATE
+
+    validate_visibility(visibility, valid_values)
+    return visibility
+
+
+def validate_visibility(visibility, valid_values=VisibilityState.STATES):
+    if visibility not in valid_values:
+        raise CloudifyCliError(
+            "Invalid visibility: `{0}`. Valid visibility's values are: "
+            "{1}".format(visibility, valid_values)
+        )

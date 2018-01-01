@@ -23,6 +23,7 @@ import traceback
 from functools import wraps
 
 import click
+from cloudify_rest_client.constants import VisibilityState
 from cloudify_rest_client.exceptions import NotModifiedError
 from cloudify_rest_client.exceptions import CloudifyClientError
 from cloudify_rest_client.exceptions import MaintenanceModeActiveError
@@ -54,28 +55,21 @@ class MutuallyExclusiveOption(click.Option):
 
     def __init__(self, *args, **kwargs):
         self.mutually_exclusive = set(kwargs.pop('mutually_exclusive', []))
-        self.mutuality_error_message = \
-            kwargs.pop('mutuality_error_message',
-                       helptexts.DEFAULT_MUTUALITY_MESSAGE)
         self.mutuality_string = ', '.join(self.mutually_exclusive)
         if self.mutually_exclusive:
             help = kwargs.get('help', '')
             kwargs['help'] = (
-                '{0}. This argument is mutually exclusive with '
-                'arguments: [{1}] ({2})'.format(
-                    help,
-                    self.mutuality_string,
-                    self.mutuality_error_message))
+                '{0}. You cannot use this argument with arguments: [{1}]'
+                .format(help, self.mutuality_string)
+            )
         super(MutuallyExclusiveOption, self).__init__(*args, **kwargs)
 
     def handle_parse_result(self, ctx, opts, args):
         if self.mutually_exclusive.intersection(opts) and self.name in opts:
             raise click.UsageError(
                 'Illegal usage: `{0}` is mutually exclusive with '
-                'arguments: [{1}] ({2}).'.format(
-                    self.name,
-                    self.mutuality_string,
-                    self.mutuality_error_message))
+                'arguments: [{1}]'.format(self.name, self.mutuality_string)
+            )
         return super(MutuallyExclusiveOption, self).handle_parse_result(
             ctx, opts, args)
 
@@ -685,6 +679,16 @@ class Options(object):
             is_flag=True,
             help=helptexts.EXCLUDE_CREDENTIALS_IN_SNAPSHOT)
 
+        self.exclude_logs = click.option(
+            '--exclude-logs',
+            is_flag=True,
+            help=helptexts.EXCLUDE_LOGS_IN_SNAPSHOT)
+
+        self.exclude_events = click.option(
+            '--exclude-events',
+            is_flag=True,
+            help=helptexts.EXCLUDE_EVENTS_IN_SNAPSHOT)
+
         self.ssh_command = click.option(
             '-c',
             '--command',
@@ -804,15 +808,6 @@ class Options(object):
             help=helptexts.USER
         )
 
-        self.permission = click.option(
-            '-p',
-            '--permission',
-            required=False,
-            type=click.Choice(['viewer', 'owner']),
-            default='viewer',
-            help=helptexts.PERMISSION
-        )
-
         self.get_data = click.option(
             '--get-data',
             is_flag=True,
@@ -831,6 +826,13 @@ class Options(object):
             '--secret-file',
             required=False,
             help=helptexts.SECRET_FILE)
+
+        self.secret_update_if_exists = click.option(
+            '-u',
+            '--update-if-exists',
+            is_flag=True,
+            help=helptexts.SECRET_UPDATE_IF_EXISTS,
+        )
 
         # same as --inputs, name changed for consistency
         self.cluster_node_options = click.option(
@@ -1066,6 +1068,20 @@ class Options(object):
     def group_tenant_role():
         return Options.tenant_role(
             helptexts.GROUP_TENANT_ROLE, required=True)
+
+    @staticmethod
+    def visibility(required=False, valid_values=VisibilityState.STATES):
+        args = ['-y', '--visibility']
+        kwargs = {
+            'required': required,
+            'help': helptexts.VISIBILITY.format(valid_values)
+        }
+        if not required:
+            kwargs['default'] = VisibilityState.TENANT
+            kwargs['cls'] = MutuallyExclusiveOption
+            kwargs['mutually_exclusive'] = ['private_resource']
+            kwargs['help'] += ' [default: tenant]'
+        return click.option(*args, **kwargs)
 
 
 options = Options()

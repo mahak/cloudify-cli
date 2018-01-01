@@ -105,7 +105,9 @@ FORCE_RESTORE_ON_DIRTY_MANAGER = (
     "deployments"
 )
 INCLUDE_METRICS_IN_SNAPSHOT = "Include metrics data in the snapshot"
-EXCLUDE_CREDENTIALS_IN_SNAPSHOT = "Exclude credentials in the snapshot"
+EXCLUDE_CREDENTIALS_IN_SNAPSHOT = "Exclude credentials from the snapshot"
+EXCLUDE_LOGS_IN_SNAPSHOT = "Exclude logs from the snapshot"
+EXCLUDE_EVENTS_IN_SNAPSHOT = "Exclude events from the snapshot"
 SNAPSHOT_ID = "The unique identifier for the snapshot"
 
 KEEP_UP_ON_FAILURE = "Do not teardown the manager even if the bootstrap fails"
@@ -141,14 +143,11 @@ IGNORE_DEPLOYMENTS = \
 
 TAIL_OUTPUT = "Tail the events of the specified execution until it ends"
 
-
 SET_MANAGEMENT_CREDS = (
     'You can use the `-s` and `-k` flags to set the ssh user and '
     'key-file path respectively. '
     '(e.g. `cfy profiles use -s my_user -k ~/my/key/path`)'
 )
-
-DEFAULT_MUTUALITY_MESSAGE = 'Cannot be used simultaneously'
 
 MANAGEMENT_IP = 'The IP of the host machine on which you bootstrapped'
 SSH_USER = 'The SSH user on the host machine with which you bootstrapped'
@@ -161,7 +160,8 @@ MANAGER_TENANT = 'The tenant associated with the current user operating the ' \
 SSL_STATE = 'Required SSL state (on/off)'
 REST_PORT = "The REST server's port"
 SSL_REST = "Connect to REST server using SSL"
-REST_CERT = "The REST server's external certificate file location"
+REST_CERT = "The REST server's external certificate file location (implies " \
+    "--ssl)"
 
 EXPORT_SSH_KEYS = 'Include ssh key files in archive'
 IMPORT_SSH_KEYS = 'WARNING: Import exported keys to their original locations'
@@ -173,8 +173,7 @@ TENANT = 'The name of the tenant'
 TENANT_TEMPLATE = 'The name of the tenant of the {0}'
 TENANT_LIST_TEMPLATE = 'The name of the tenant to list {0}s from'
 ALL_TENANTS = 'Include resources from all tenants associated with the user. ' \
-              'This option is mutually exclusive with the argument ' \
-              '`tenant_name` and cannot be used simultaneously'
+              'You cannot use this argument with arguments: [tenant_name]'
 GROUP = 'The name of the user group'
 GROUP_DN = 'The ldap group\'s distinguished name. This option is required ' \
            'when using ldap'
@@ -196,11 +195,6 @@ CLUSTER_JOIN_PROFILE = (
     '(use when you have a profile containing the cluster master)'
 )
 
-PRIVATE_RESOURCE = 'If set to True the uploaded resource will only be ' \
-                   'accessible by its creator. Otherwise, the resource is ' \
-                   'accessible by all users that belong to the same tenant. ' \
-                   '(default: False)'
-
 SKIP_PLUGINS_VALIDATION = 'Determines whether to validate if the' \
                           ' required deployment plugins exist on the manager.'\
                           ' If validation is skipped, plugins containing' \
@@ -209,8 +203,6 @@ SKIP_PLUGINS_VALIDATION = 'Determines whether to validate if the' \
 USER = 'Username of user to whom the permissions apply. ' \
        'This argument can be used multiple times'
 USER_TENANT_ROLE = 'Role assigned to user in the context of the tenant.'
-PERMISSION = 'The permission applicable to a resource [viewer|owner] ' \
-             '(default:viewer)'
 RESTORE_CERTIFICATES = 'Restore the certificates from the snapshot, using ' \
                        'them to replace the current Manager certificates. ' \
                        'If the certificates` metadata (I.E: the Manager IP ' \
@@ -225,7 +217,7 @@ NO_REBOOT = 'Do not perform an automatic reboot to the Manager VM after ' \
             'restoring certificates a from snapshot (not recommended). ' \
             'Only relevant if the `--restore-certificates` flag was supplied'
 SKIP_CREDENTIALS_VALIDATION = 'Do not check that the passed credentials are ' \
-                              'correct (default:False)'
+                              'correct (default: False)'
 LDAP_SERVER = 'The LDAP server address to authenticate against'
 LDAP_USERNAME = 'The LDAP admin username to be set on the Cloudify manager'
 LDAP_PASSWORD = 'The LDAP admin password to be set on the Cloudify manager'
@@ -242,5 +234,11 @@ PROFILE_NAME = 'Name of the profile to use'
 SECRET_VALUE = "The secret's value to be set"
 SECRET_STRING = "The string to use as the secret's value"
 SECRET_FILE = "The secret's file to use its content as value to be set"
+SECRET_UPDATE_IF_EXISTS = 'Update secret value if secret key already exists'
 CLUSTER_NODE_OPTIONS = 'Additional options for the cluster node '\
                        'configuration {0}'.format(INPUTS_PARAMS_USAGE)
+PRIVATE_RESOURCE = 'If set to True the uploaded resource will only be ' \
+                   'accessible by its creator. Otherwise, the resource is ' \
+                   'accessible by all users that belong to the same tenant. ' \
+                   '(default: False)'
+VISIBILITY = 'Defines who can access the resource, can be set to one of {0}'

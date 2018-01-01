@@ -13,14 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ############
+
 import os
+
+from cloudify_rest_client.constants import VISIBILITY_EXCEPT_PRIVATE
 
 from .. import env
 from ..cli import cfy
 from ..constants import RESOURCE_LABELS
 from ..exceptions import CloudifyCliError
 from ..table import print_data, print_details
-from ..utils import handle_client_error, prettify_client_error
+from ..utils import (handle_client_error,
+                     prettify_client_error,
+                     validate_visibility)
 
 SECRETS_COLUMNS = ['key', 'created_at', 'updated_at', 'resource_availability',
                    'tenant_name', 'created_by']
@@ -40,15 +45,24 @@ def secrets():
 @cfy.argument('key', callback=cfy.validate_name)
 @cfy.options.secret_string
 @cfy.options.secret_file
+@cfy.options.secret_update_if_exists
+@cfy.options.visibility()
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client(use_tenant_in_header=True)
 @cfy.pass_logger
-def create(key, secret_string, secret_file, logger, client):
+def create(key,
+           secret_string,
+           secret_file,
+           update_if_exists,
+           visibility,
+           logger,
+           client):
     """Create a new secret (key-value pair)
 
     `KEY` is the new secret's key
     """
+    validate_visibility(visibility)
     if secret_string and secret_file:
         raise CloudifyCliError('Failed to create secret key. '
                                'The command can only accept either'
@@ -68,7 +82,10 @@ def create(key, secret_string, secret_file, logger, client):
                    'tenant or as a global secret'.format(key)
 
     with handle_client_error(409, graceful_msg, logger):
-        client.secrets.create(key, secret_string)
+        client.secrets.create(key,
+                              secret_string,
+                              update_if_exists,
+                              visibility)
         logger.info('Secret `{0}` created'.format(key))
 
 
@@ -89,7 +106,7 @@ def get(key, logger, client):
         logger.info('Getting info for secret `{0}`...'.format(key))
         secret_details = client.secrets.get(key)
         secret_details.pop('private_resource')
-        secret_details['availability'] = \
+        secret_details['visibility'] = \
             secret_details.pop('resource_availability')
         print_details(secret_details, 'Requested secret info:')
 
@@ -160,14 +177,14 @@ def delete(key, logger, client):
 
 
 @secrets.command(name='set-global',
-                 short_help="Set the secret's availability to global")
+                 short_help="Set the secret's visibility to global")
 @cfy.argument('key', callback=cfy.validate_name)
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client(use_tenant_in_header=True)
 @cfy.pass_logger
 def set_global(key, logger, client):
-    """Set the secret's availability to global
+    """Set the secret's visibility to global
 
     `KEY` is the secret's key
     """
@@ -175,3 +192,25 @@ def set_global(key, logger, client):
     with prettify_client_error(status_codes, logger):
         client.secrets.set_global(key)
         logger.info('Secret `{0}` was set to global'.format(key))
+        logger.info("This command will be deprecated soon, please use the "
+                    "'set-visibility' command instead")
+
+
+@secrets.command(name='set-visibility',
+                 short_help="Set the secret's visibility")
+@cfy.argument('key', callback=cfy.validate_name)
+@cfy.options.visibility(required=True, valid_values=VISIBILITY_EXCEPT_PRIVATE)
+@cfy.options.verbose()
+@cfy.assert_manager_active()
+@cfy.pass_client(use_tenant_in_header=True)
+@cfy.pass_logger
+def set_visibility(key, visibility, logger, client):
+    """Set the secret's visibility
+
+    `KEY` is the secret's key
+    """
+    validate_visibility(visibility, valid_values=VISIBILITY_EXCEPT_PRIVATE)
+    status_codes = [400, 403, 404]
+    with prettify_client_error(status_codes, logger):
+        client.secrets.set_visibility(key, visibility)
+        logger.info('Secret `{0}` was set to {1}'.format(key, visibility))
