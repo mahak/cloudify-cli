@@ -1,3 +1,4 @@
+import os
 import shutil
 import tempfile
 
@@ -10,6 +11,8 @@ from cloudify_cli.exceptions import CloudifyCliError
 from cloudify_cli.constants import DEFAULT_TENANT_NAME
 
 from cloudify_rest_client import plugins
+
+from .constants import PLUGINS_DIR
 
 
 class PluginsTest(CliCommandTest):
@@ -33,7 +36,7 @@ class PluginsTest(CliCommandTest):
                                          'distribution_release': 'trusty',
                                          'distribution': 'ubuntu',
                                          'uploaded_at': 'now',
-                                         'resource_availability': 'private',
+                                         'visibility': 'private',
                                          'created_by': 'admin',
                                          'tenant_name': DEFAULT_TENANT_NAME}))
 
@@ -59,7 +62,9 @@ class PluginsTest(CliCommandTest):
                 'pip',
                 archive_destination_dir=plugin_dest_dir
             )
-            self.invoke('cfy plugins upload {0}'.format(plugin_path))
+            yaml_path = os.path.join(PLUGINS_DIR, 'plugin.yaml')
+            self.invoke('cfy plugins upload {0} -y {1}'.format(plugin_path,
+                                                               yaml_path))
         finally:
             shutil.rmtree(plugin_dest_dir, ignore_errors=True)
 
@@ -73,10 +78,10 @@ class PluginsTest(CliCommandTest):
 
     def test_plugins_set_visibility(self):
         self.client.plugins.set_visibility = MagicMock()
-        self.invoke('cfy plugins set-visibility a-plugin-id -y global')
+        self.invoke('cfy plugins set-visibility a-plugin-id -l global')
 
     def test_plugins_set_visibility_invalid_argument(self):
-        self.invoke('cfy plugins set-visibility a-plugin-id -y private',
+        self.invoke('cfy plugins set-visibility a-plugin-id -l private',
                     err_str_segment='Invalid visibility: `private`',
                     exception=CloudifyCliError)
 
@@ -84,7 +89,7 @@ class PluginsTest(CliCommandTest):
         outcome = self.invoke('cfy plugins set-visibility a-plugin-id',
                               err_str_segment='2',
                               exception=SystemExit)
-        self.assertIn('Missing option "-y" / "--visibility"', outcome.output)
+        self.assertIn('Missing option "-l" / "--visibility"', outcome.output)
 
     def test_blueprints_set_visibility_wrong_argument(self):
         outcome = self.invoke('cfy plugins set-visibility a-plugin-id -g',
@@ -94,17 +99,21 @@ class PluginsTest(CliCommandTest):
 
     def test_plugins_upload_mutually_exclusive_arguments(self):
         outcome = self.invoke(
-            'cfy plugins upload --private-resource -y tenant',
+            'cfy plugins upload --private-resource -l tenant',
             err_str_segment='2',  # Exit code
             exception=SystemExit
         )
         self.assertIn('mutually exclusive with arguments:', outcome.output)
 
     def test_plugins_upload_invalid_argument(self):
-        self.invoke('cfy plugins upload -y bla plugin_path',
+        yaml_path = os.path.join(PLUGINS_DIR, 'plugin.yaml')
+        self.invoke('cfy plugins upload {0} -l bla -y {1}'.
+                    format(yaml_path, yaml_path),
                     err_str_segment='Invalid visibility: `bla`',
                     exception=CloudifyCliError)
 
     def test_plugins_upload_with_visibility(self):
         self.client.plugins.upload = MagicMock()
-        self.invoke('cfy plugins upload -y private plugin_path')
+        yaml_path = os.path.join(PLUGINS_DIR, 'plugin.yaml')
+        self.invoke('cfy plugins upload {0} -l private -y {1}'
+                    .format(yaml_path, yaml_path))

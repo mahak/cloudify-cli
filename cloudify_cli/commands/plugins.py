@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ############
+import os
 
 import wagon
 
@@ -21,14 +22,14 @@ from cloudify_rest_client.constants import VISIBILITY_EXCEPT_PRIVATE
 from .. import utils
 from ..table import print_data
 from ..cli import helptexts, cfy
-from ..constants import RESOURCE_LABELS
 from ..utils import (prettify_client_error,
                      get_visibility,
                      validate_visibility)
 
 PLUGIN_COLUMNS = ['id', 'package_name', 'package_version', 'distribution',
                   'supported_platform', 'distribution_release', 'uploaded_at',
-                  'resource_availability', 'tenant_name', 'created_by']
+                  'visibility', 'tenant_name', 'created_by', 'yaml_url_path']
+GET_DATA_COLUMNS = ['file_server_path']
 EXCLUDED_COLUMNS = ['archive_name', 'distribution_version', 'excluded_wheels',
                     'package_source', 'supported_py_versions', 'wheels']
 
@@ -84,6 +85,7 @@ def delete(plugin_id, force, logger, client, tenant_name):
 @plugins.command(name='upload',
                  short_help='Upload a plugin [manager only]')
 @cfy.argument('plugin-path')
+@cfy.options.plugin_yaml_path()
 @cfy.options.private_resource
 @cfy.options.visibility()
 @cfy.options.verbose()
@@ -94,6 +96,7 @@ def delete(plugin_id, force, logger, client, tenant_name):
 @cfy.pass_logger
 def upload(ctx,
            plugin_path,
+           yaml_path,
            private_resource,
            visibility,
            logger,
@@ -108,13 +111,20 @@ def upload(ctx,
     if tenant_name:
         logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
 
+    logger.info('Creating plugin zip archive..')
+    plugin_path = utils.get_local_path(plugin_path)
+    yaml_path = utils.get_local_path(yaml_path)
+    plugin_path = utils.zip_files([plugin_path, yaml_path])
+
     progress_handler = utils.generate_progress_handler(plugin_path, '')
+
     visibility = get_visibility(private_resource, visibility, logger)
-    logger.info('Uploading plugin {0}...'.format(plugin_path))
+    logger.info('Uploading plugin archive (wagon + yaml)..')
     plugin = client.plugins.upload(plugin_path,
                                    visibility,
                                    progress_handler)
     logger.info("Plugin uploaded. The plugin's id is {0}".format(plugin.id))
+    os.remove(plugin_path)
 
 
 @plugins.command(name='download',
@@ -145,11 +155,12 @@ def download(plugin_id, output_path, logger, client, tenant_name):
                  short_help='Retrieve plugin information [manager only]')
 @cfy.argument('plugin-id')
 @cfy.options.verbose()
+@cfy.options.get_data
 @cfy.options.tenant_name(required=False, resource_name_for_help='plugin')
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def get(plugin_id, logger, client, tenant_name):
+def get(plugin_id, logger, client, tenant_name, get_data):
     """Retrieve information for a specific plugin
 
     `PLUGIN_ID` is the id of the plugin to get information on.
@@ -157,9 +168,10 @@ def get(plugin_id, logger, client, tenant_name):
     if tenant_name:
         logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
     logger.info('Retrieving plugin {0}...'.format(plugin_id))
-    plugin = client.plugins.get(plugin_id)
+    plugin = client.plugins.get(plugin_id, _get_data=get_data)
     _transform_plugin_response(plugin)
-    print_data(PLUGIN_COLUMNS, plugin, 'Plugin:', labels=RESOURCE_LABELS)
+    columns = PLUGIN_COLUMNS + GET_DATA_COLUMNS if get_data else PLUGIN_COLUMNS
+    print_data(columns, plugin, 'Plugin:')
 
 
 @plugins.command(name='list',
@@ -170,10 +182,17 @@ def get(plugin_id, logger, client, tenant_name):
     required=False, resource_name_for_help='plugin')
 @cfy.options.all_tenants
 @cfy.options.verbose()
+@cfy.options.get_data
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def list(sort_by, descending, tenant_name, all_tenants, logger, client):
+def list(sort_by,
+         descending,
+         tenant_name,
+         all_tenants,
+         logger,
+         client,
+         get_data):
     """List all plugins on the manager
     """
     if tenant_name:
@@ -181,13 +200,12 @@ def list(sort_by, descending, tenant_name, all_tenants, logger, client):
     logger.info('Listing all plugins...')
     plugins_list = client.plugins.list(sort=sort_by,
                                        is_descending=descending,
-                                       _all_tenants=all_tenants)
+                                       _all_tenants=all_tenants,
+                                       _get_data=get_data)
     for plugin in plugins_list:
         _transform_plugin_response(plugin)
-    print_data(PLUGIN_COLUMNS,
-               plugins_list,
-               'Plugins:',
-               labels=RESOURCE_LABELS)
+    columns = PLUGIN_COLUMNS + GET_DATA_COLUMNS if get_data else PLUGIN_COLUMNS
+    print_data(columns, plugins_list, 'Plugins:')
 
 
 def _transform_plugin_response(plugin):

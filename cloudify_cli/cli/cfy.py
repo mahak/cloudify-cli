@@ -1071,7 +1071,7 @@ class Options(object):
 
     @staticmethod
     def visibility(required=False, valid_values=VisibilityState.STATES):
-        args = ['-y', '--visibility']
+        args = ['-l', '--visibility']
         kwargs = {
             'required': required,
             'help': helptexts.VISIBILITY.format(valid_values)
@@ -1082,6 +1082,14 @@ class Options(object):
             kwargs['mutually_exclusive'] = ['private_resource']
             kwargs['help'] += ' [default: tenant]'
         return click.option(*args, **kwargs)
+
+    @staticmethod
+    def plugin_yaml_path():
+        return click.option(
+            '-y',
+            '--yaml-path',
+            required=True,
+            help=helptexts.PLUGIN_YAML_PATH)
 
 
 options = Options()
