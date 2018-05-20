@@ -20,7 +20,7 @@ import yaml
 import shutil
 from functools import wraps
 from datetime import datetime
-from requests.exceptions import ReadTimeout
+from requests.exceptions import ReadTimeout, ConnectionError
 
 from cloudify_rest_client.exceptions import (CloudifyClientError,
                                              NotClusterMaster)
@@ -81,6 +81,7 @@ def cluster():
                  short_help='Show the current cluster status [cluster only]')
 @pass_cluster_client()
 @cfy.pass_logger
+@cfy.options.verbose()
 def status(client, logger):
     """Display the current status of the Cloudify Manager cluster
     """
@@ -95,6 +96,7 @@ def status(client, logger):
                  short_help='Start a Cloudify Manager cluster [manager only]')
 @cfy.pass_client()
 @cfy.pass_logger
+@cfy.options.verbose()
 @cfy.options.timeout()
 @cfy.options.cluster_node_options
 @cfy.options.cluster_host_ip
@@ -139,6 +141,7 @@ def start(client,
 @cfy.pass_client()
 @cfy.pass_logger
 @cfy.argument('join_profile')
+@cfy.options.verbose()
 @cfy.options.timeout()
 @cfy.options.cluster_node_options
 @cfy.options.cluster_host_ip
@@ -229,6 +232,7 @@ def join(client,
                             '[cluster only]')
 @pass_cluster_client()
 @cfy.pass_logger
+@cfy.options.verbose()
 def update_profile(client, logger):
     """Fetch the list of the cluster nodes and update the current profile.
 
@@ -237,23 +241,38 @@ def update_profile(client, logger):
     will be contacted in case of a cluster master failure.
     """
     logger.info('Fetching the cluster nodes list...')
-    _update_profile_cluster_settings(env.profile, client, logger=logger)
+    nodes = client.cluster.nodes.list()
+    _update_profile_cluster_settings(env.profile, nodes, logger=logger)
     logger.info('Profile is up to date with {0} nodes'
                 .format(len(env.profile.cluster)))
 
 
-def _update_profile_cluster_settings(profile, client, logger=None):
-    nodes = client.cluster.nodes.list()
-    stored_nodes = {node['manager_ip'] for node in env.profile.cluster}
+def _update_profile_cluster_settings(profile, nodes, logger=None):
+    """Update the cluster list set in profile with the received nodes
+
+    We will merge the received nodes into the stored list - adding and
+    removing when necessary - and not just set the profile list to the
+    received nodes, because the profile might have more details about
+    the nodes (eg. a certificate path)
+    """
+    stored_nodes = {node.get('name') for node in env.profile.cluster}
+    received_nodes = {node.name for node in nodes}
+    if env.profile.cluster is None:
+        env.profile.cluster = []
     for node in nodes:
-        if node.host_ip not in stored_nodes:
+        if node.name not in stored_nodes:
             if logger:
-                logger.info('Adding cluster node: {0}'.format(node.host_ip))
+                logger.info('Adding cluster node {0} to local profile'
+                            .format(node.host_ip))
             env.profile.cluster.append({
-                # currently only the host IP is received; all other parameters
-                # will be defaulted to the ones from the last used manager
+                'name': node.name,
+                # all other conenction parameters will be defaulted to the
+                # ones from the last used manager
                 'manager_ip': node.host_ip
             })
+    # filter out removed nodes
+    env.profile.cluster = [n for n in env.profile.cluster
+                           if n['name'] in received_nodes]
     env.profile.save()
 
 
@@ -261,6 +280,7 @@ def _update_profile_cluster_settings(profile, client, logger=None):
                  short_help='Set one of the cluster nodes as the new active '
                             '[cluster only]')
 @cfy.argument('node_name')
+@cfy.options.verbose()
 @cfy.options.timeout(default=60)
 @pass_cluster_client()
 @cfy.pass_logger
@@ -328,16 +348,17 @@ def _prepare_node(node):
                short_help='List the nodes in the cluster [cluster only]')
 @pass_cluster_client()
 @cfy.pass_logger
+@cfy.options.verbose()
 def list_nodes(client, logger):
     """Display a table with basic information about the nodes in the cluster
     """
-
     response = client.cluster.nodes.list()
     for node in response:
         _prepare_node(node)
     print_data(CLUSTER_COLUMNS, response, 'HA Cluster nodes',
                defaults=CLUSTER_COLUMNS_DEFAULTS,
                labels={'services': 'cloudify services'})
+    _update_profile_cluster_settings(env.profile, response, logger=logger)
 
 
 @nodes.command(name='get',
@@ -345,6 +366,7 @@ def list_nodes(client, logger):
 @pass_cluster_client()
 @cfy.pass_logger
 @cfy.argument('cluster-node-name')
+@cfy.options.verbose()
 def get_node(client, logger, cluster_node_name):
     node = client.cluster.nodes.details(cluster_node_name)
     _prepare_node(node)
@@ -364,6 +386,7 @@ def get_node(client, logger, cluster_node_name):
 @cfy.pass_logger
 @cfy.options.cluster_node_options
 @cfy.argument('cluster-node-name')
+@cfy.options.verbose()
 def update_node_options(client, logger, cluster_node_name,
                         cluster_node_options):
     if not cluster_node_options:
@@ -372,11 +395,33 @@ def update_node_options(client, logger, cluster_node_name,
     logger.info('Node {0} updated'.format(cluster_node_name))
 
 
+@nodes.command(name='set-certificate')
+@cfy.pass_logger
+@cfy.argument('cluster-node-name')
+@cfy.argument('certificate-path')
+def set_node_certificate(logger, cluster_node_name, certificate_path):
+    """Set REST certificate for the given cluster node."""
+    certificate_path = os.path.expanduser(certificate_path)
+    if not os.path.exists(certificate_path):
+        raise CloudifyCliError('Certificate file {0} does not exist'
+                               .format(certificate_path))
+
+    for node in env.profile.cluster:
+        if node['name'] == cluster_node_name:
+            node['cert'] = certificate_path
+            break
+    else:
+        raise CloudifyCliError('Node {0} not found in the cluster profile'
+                               .format(cluster_node_name))
+    env.profile.save()
+
+
 @nodes.command(name='remove',
                short_help='Remove a node from the cluster [cluster only]')
 @pass_cluster_client()
 @cfy.pass_logger
 @cfy.argument('cluster-node-name')
+@cfy.options.verbose()
 def remove_node(client, logger, cluster_node_name):
     """Unregister a node from the cluster.
 
@@ -399,7 +444,7 @@ def remove_node(client, logger, cluster_node_name):
         if profile_context.profile_name == removed_node_ip:
             logger.info('Profile {0} set as a non-cluster profile'
                         .format(profile_context.profile_name))
-            profile_context.cluster = None
+            profile_context.cluster = []
             if hasattr(profile_context, '_original'):
                 for attrname, attr in profile_context._original.items():
                     setattr(profile_context, attrname, attr)
@@ -407,8 +452,9 @@ def remove_node(client, logger, cluster_node_name):
             logger.info(
                 'Profile {0}: {1} removed from cluster nodes list'
                 .format(profile_context.profile_name, cluster_node_name))
-            profile_context.cluster = [node for node in profile_context.cluster
-                                       if node['name'] != cluster_node_name]
+            profile_context.cluster = [
+                node for node in profile_context.cluster
+                if node.get('name') != cluster_node_name]
         profile_context.save()
 
     logger.info('Node {0} was removed successfully!'
@@ -512,10 +558,11 @@ def _wait_for_cluster_initialized(client, logger=None, timeout=900):
                 since=last_log)
         except NotClusterMaster:
             raise
-        except CloudifyClientError as e:
-            # during cluster initialization, we restart the database, nginx,
-            # and the rest service; while that happens, the server might
-            # return intermittent 500 errors
+        except (ConnectionError, CloudifyClientError) as e:
+            # during cluster initialization, we restart the database - while
+            # that happens, the server might return intermittent 500 errors;
+            # we also restart the restservice and nginx, which might lead
+            # to intermittent connection errors
             logger.debug('Error while fetching cluster status: {0}'
                          .format(e))
         else:

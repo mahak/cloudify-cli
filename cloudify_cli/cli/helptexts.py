@@ -28,7 +28,7 @@ INPUTS_PARAMS_USAGE = (
 )
 WORKFLOW_TO_EXECUTE = "The workflow to execute [default: {0}]"
 
-BLUEPRINT_PATH = "The path to the application's blueprint file"
+BLUEPRINT_PATH = "The path to the application's blueprint file [DEPRECATED]"
 BLUEPRINT_ID = "The unique identifier for the blueprint"
 VALIDATE_BLUEPRINT = "Validate the blueprint first"
 
@@ -110,20 +110,6 @@ EXCLUDE_LOGS_IN_SNAPSHOT = "Exclude logs from the snapshot"
 EXCLUDE_EVENTS_IN_SNAPSHOT = "Exclude events from the snapshot"
 SNAPSHOT_ID = "The unique identifier for the snapshot"
 
-KEEP_UP_ON_FAILURE = "Do not teardown the manager even if the bootstrap fails"
-DONT_SAVE_PASSWORD_IN_PROFILE = "After the bootstrap is complete, don't " \
-                                "save the password in the profile context. " \
-                                "Regardless, the password will *always* be " \
-                                "printed to the console [default: False]"
-VALIDATE_ONLY = (
-    "Only perform resource creation validation without actually bootstrapping"
-)
-SKIP_BOOTSTRAP_VALIDATIONS = (
-    "Bootstrap without validating resource creation prior to bootstrapping "
-    "the manager"
-)
-SKIP_BOOTSTRAP_SANITY = \
-    "Bootstrap without performing the post-bootstrap sanity test"
 DEV_TASK_ARGS = "Arguments for the fabric task"
 
 MAINTENANCE_MODE_WAIT = (
@@ -149,8 +135,8 @@ SET_MANAGEMENT_CREDS = (
     '(e.g. `cfy profiles use -s my_user -k ~/my/key/path`)'
 )
 
-MANAGEMENT_IP = 'The IP of the host machine on which you bootstrapped'
-SSH_USER = 'The SSH user on the host machine with which you bootstrapped'
+MANAGEMENT_IP = 'The IP of the manager host machine'
+SSH_USER = 'The SSH user on the manager host machine'
 SSH_KEY = 'The path to the ssh key-file to use when connecting'
 SSH_PORT = 'The SSH port to use when connecting to the manager'
 MANAGER_USERNAME = 'Manager username used to run commands on the manager'
@@ -168,6 +154,8 @@ IMPORT_SSH_KEYS = 'WARNING: Import exported keys to their original locations'
 
 SORT_BY = "Key for sorting the list"
 DESCENDING = "Sort list in descending order [default: False]"
+SEARCH = 'Search resources by name/id. The returned list will include only ' \
+         'resources that contain the given search pattern'
 
 TENANT = 'The name of the tenant'
 TENANT_TEMPLATE = 'The name of the tenant of the {0}'
@@ -234,12 +222,46 @@ PROFILE_NAME = 'Name of the profile to use'
 SECRET_VALUE = "The secret's value to be set"
 SECRET_STRING = "The string to use as the secret's value"
 SECRET_FILE = "The secret's file to use its content as value to be set"
-SECRET_UPDATE_IF_EXISTS = 'Update secret value if secret key already exists'
+SECRET_UPDATE_IF_EXISTS = 'Update secret value if secret key already ' \
+                          'exists. [This option is deprecated; use cfy ' \
+                          'secrets update command instead]'
+HIDDEN_VALUE = 'The secret value is only shown to the user that created the ' \
+               'secret and to admins. Use of the secret is allowed ' \
+               'according to user roles and the visibility of the secret'
+PLUGINS_BUNDLE_PATH = 'The path of the plugins bundle'
 CLUSTER_NODE_OPTIONS = 'Additional options for the cluster node '\
                        'configuration {0}'.format(INPUTS_PARAMS_USAGE)
-PRIVATE_RESOURCE = 'If set to True the uploaded resource will only be ' \
-                   'accessible by its creator. Otherwise, the resource is ' \
-                   'accessible by all users that belong to the same tenant. ' \
-                   '(default: False)'
+PRIVATE_RESOURCE = 'This option is deprecated; use --visibility option ' \
+                   'instead. If set to True the uploaded resource will only ' \
+                   'be accessible by its creator. Otherwise, the resource ' \
+                   'is accessible by all users that belong to the same ' \
+                   'tenant [default: False].'
 VISIBILITY = 'Defines who can see the resource, can be set to one of {0}'
 PLUGIN_YAML_PATH = "The path to the plugin's yaml file"
+PAGINATION_SIZE = 'The max number of results to retrieve per page ' \
+                  '[default: 1000]'
+PAGINATION_OFFSET = 'The number of resources to skip; --pagination-offset=1 ' \
+                    'skips the first resource [default: 0]'
+DRY_RUN = 'If set, no actual operations will be performed. This ' \
+          'only prints the executed tasks, without side effects'
+
+MANAGER_IP_TRANSFER_MODE = 'The private IP of the new Cloudify Manger.' \
+             ' This is the IP through which the agents connect to the Manager.'
+MANAGER_CERTIFICATE_PATH_TRANSFER_MODE = 'A path to a file containing the' \
+                                         ' SSL certificate of the new' \
+                                         ' Cloudify Manager. The certificate' \
+                                         ' is available on the Manager: ' \
+                                         '/etc/cloudify/ssl/' \
+                                         'cloudify_internal_ca_cert.pem'
+MANAGER_REST_TOKEN = 'The REST token of the new Cloudify Manager.' \
+                     ' Acquire the token by running `cfy tokens get` while' \
+                     ' using the new Manager.'
+MANAGER_IP_INSTALL_MODE = "The private IP of the current leader (master)" \
+                          " Manager. This IP is used to connect to the" \
+                          " Manager's RabbitMQ. (relevant only in HA cluser)"
+MANAGER_CERTIFICATE_PATH_INSTALL_MODE = 'A path to a file containing the SSL' \
+                                         ' certificate of the current leader' \
+                                         ' Manager. The certificate is' \
+                                         ' available on the Manager: ' \
+                                         '/etc/cloudify/ssl/' \
+                                         'cloudify_internal_ca_cert.pem'

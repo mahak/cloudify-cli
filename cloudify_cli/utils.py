@@ -145,6 +145,7 @@ def zip_files(files):
     for path in files:
         copy(path, source_folder)
     zip(source_folder, destination_zip, include_folder=False)
+    shutil.rmtree(source_folder)
     return destination_zip
 
 
@@ -269,15 +270,6 @@ def generate_progress_handler(file_path, action='', max_bar_length=80):
     return print_progress
 
 
-def add_ignore_bootstrap_validations_input(inputs):
-    """This is used when passing the `--skip-validations` flag as we
-    also want to skip bootstrap validations, not just `creation_validation`
-    operations.
-    """
-    assert isinstance(inputs, dict)
-    inputs.update({'ignore_bootstrap_validations': True})
-
-
 @contextmanager
 def handle_client_error(status_code, message, logger):
     """Gracefully handle client errors with specific status codes
@@ -320,19 +312,33 @@ def get_visibility(private_resource,
 
 
 def validate_visibility(visibility, valid_values=VisibilityState.STATES):
-    if visibility not in valid_values:
+    if visibility and visibility not in valid_values:
         raise CloudifyCliError(
             "Invalid visibility: `{0}`. Valid visibility's values are: "
             "{1}".format(visibility, valid_values)
         )
 
 
-def get_local_path(source):
-    if urlparse(source).scheme:
-        downloaded_file = download_file(source, keep_name=True)
+def get_local_path(source, destination=None, create_temp=False):
+    allowed_schemes = ['http', 'https']
+    if urlparse(source).scheme in allowed_schemes:
+        downloaded_file = download_file(source, destination, keep_name=True)
         return downloaded_file
     elif os.path.isfile(source):
-        return source
+        if not destination and create_temp:
+            source_name = os.path.basename(source)
+            destination = os.path.join(tempfile.mkdtemp(), source_name)
+        if destination:
+            shutil.copy(source, destination)
+            return destination
+        else:
+            return source
     else:
         raise CloudifyCliError(
-            'You must provide either a path to a local file, or a remote URL')
+            'You must provide either a path to a local file, or a remote URL '
+            'using one of the allowed schemes: {0}'.format(allowed_schemes))
+
+
+def explicit_tenant_name_message(tenant_name, logger):
+    if tenant_name:
+        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))

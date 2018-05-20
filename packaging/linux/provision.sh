@@ -1,13 +1,12 @@
-#/bin/bash -e
+#/bin/bash -e -x
 
 export GITHUB_USERNAME=$1
 export GITHUB_PASSWORD=$2
-AWS_ACCESS_KEY_ID=$3
-AWS_ACCESS_KEY=$4
-CLI_BRANCH=$5
-PACKAGER_BRANCH=$6
-export REPO=$7
-export CORE_TAG_NAME="4.3.dev1"
+export AWS_ACCESS_KEY_ID=$3
+export AWS_ACCESS_KEY=$4
+export REPO=$5
+export BRANCH=$6
+export CORE_TAG_NAME="4.4.dev1"
 export CORE_BRANCH="master"
 
 
@@ -52,14 +51,18 @@ function prepare_linux () {
     if  which yum >> /dev/null; then
         sudo yum install -y http://opensource.wandisco.com/centos/6/git/x86_64/wandisco-git-release-6-1.noarch.rpm
         sudo yum install -y git fakeroot python-devel rpm-build
-        sudo curl -sSL https://rvm.io/mpapis.asc | gpg2 --import -
+        sudo yum update -y nss
+        gpg=gpg2
     else
         sudo apt-get install -y git curl fakeroot python-dev
-        sudo curl -sSL https://rvm.io/mpapis.asc | gpg --import -
+        gpg=gpg
     fi
-    
-    sudo curl -L get.rvm.io | bash -s stable
-    
+
+    $gpg --keyserver hkp://keys.gnupg.net --recv-keys \
+        409B6B1796C275462A1703113804BB82D39DC0E3 \
+        7D2BAF1CF37B13E2069D6956105BD0E739499BDB
+    curl -sSL https://get.rvm.io | bash -s stable
+
     if  which yum >> /dev/null; then
         source /etc/profile.d/rvm.sh
     else
@@ -70,6 +73,8 @@ function prepare_linux () {
     gem install omnibus --no-ri --no-rdoc
 }
 
+echo "BRANCH=$BRANCH"
+echo "REPO=$REPO"
 if [[ "$OSTYPE" == "darwin"* ]]; then
     prepare_osx
 else
@@ -85,11 +90,20 @@ install_common_prereqs &&
 rm -rf cloudify-cli
 git clone https://github.com/cloudify-cosmo/cloudify-cli.git
 cd ~/cloudify-cli/packaging/omnibus
-gitTagExists=$(git tag -l $CORE_TAG_NAME)
+export CLI_BRANCH="$CORE_BRANCH"
 if [ "$CORE_BRANCH" != "master" ]; then
-    git checkout -b ${CORE_BRANCH} origin/${CORE_BRANCH}
+    if [ "$REPO" == "cloudify-versions" ]; then
+        source ~/cloudify-cli/packaging/source_branch
+    fi
+    git checkout -b $CLI_BRANCH origin/$CLI_BRANCH
 else
-    git checkout ${CORE_BRANCH}
+    git checkout $CLI_BRANCH
+fi
+
+if [[ ! -z $BRANCH ]] && [[ "$BRANCH" != "master" ]] && git show-ref --quiet origin/$BRANCH ; then
+    export CLI_BRANCH="$BRANCH"
+    git checkout -b $CLI_BRANCH origin/$CLI_BRANCH
+    AWS_S3_PATH="$AWS_S3_PATH/$BRANCH"
 fi
 
 # Get Omnibus software from Chef Omnibus repo

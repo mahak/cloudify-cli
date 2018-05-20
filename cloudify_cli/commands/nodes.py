@@ -52,8 +52,7 @@ def get(node_id, deployment_id, logger, client, tenant_name):
 
     `NODE_ID` is the node id to get information on.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('Retrieving node {0} for deployment {1}'.format(
         node_id, deployment_id))
     try:
@@ -114,18 +113,27 @@ def get(node_id, deployment_id, logger, client, tenant_name):
 @cfy.options.tenant_name_for_list(
     required=False, resource_name_for_help='node')
 @cfy.options.all_tenants
+@cfy.options.search
+@cfy.options.pagination_offset
+@cfy.options.pagination_size
 @cfy.options.verbose()
 @cfy.pass_logger
 @cfy.pass_client()
-def list(deployment_id, sort_by, descending, tenant_name, all_tenants,
+def list(deployment_id,
+         sort_by,
+         descending,
+         tenant_name,
+         all_tenants,
+         search,
+         pagination_offset,
+         pagination_size,
          logger, client):
     """List nodes
 
     If `DEPLOYMENT_ID` is provided, list nodes for that deployment.
     Otherwise, list nodes for all deployments.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     try:
         if deployment_id:
             logger.info('Listing nodes for deployment {0}...'.format(
@@ -136,7 +144,11 @@ def list(deployment_id, sort_by, descending, tenant_name, all_tenants,
             deployment_id=deployment_id,
             sort=sort_by,
             is_descending=descending,
-            _all_tenants=all_tenants)
+            _all_tenants=all_tenants,
+            _search=search,
+            _offset=pagination_offset,
+            _size=pagination_size
+        )
     except CloudifyClientError as e:
         if e.status_code != 404:
             raise
@@ -144,3 +156,5 @@ def list(deployment_id, sort_by, descending, tenant_name, all_tenants,
             deployment_id))
 
     print_data(NODE_COLUMNS, nodes, 'Nodes:')
+    total = nodes.metadata.pagination.total
+    logger.info('Showing {0} of {1} nodes'.format(len(nodes), total))

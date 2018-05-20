@@ -35,8 +35,7 @@ EXPORTED_KEYS_DIRNAME = '.exported-ssh-keys'
 EXPORTED_SSH_KEYS_DIR = os.path.join(env.PROFILES_DIR, EXPORTED_KEYS_DIRNAME)
 PROFILE_COLUMNS = ['name', 'manager_ip', 'manager_username', 'manager_tenant',
                    'ssh_user', 'ssh_key_path', 'ssh_port',
-                   'rest_port', 'rest_protocol', 'rest_certificate',
-                   'bootstrap_state']
+                   'rest_port', 'rest_protocol', 'rest_certificate']
 
 
 @cfy.group(name='profiles')
@@ -46,8 +45,8 @@ def profiles():
 
     Each profile can manage a single Cloudify manager.
 
-    A profile is automatically created when using the `cfy profiles use`,
-    and `cfy bootstrap` commands.
+    A profile is automatically created when using the `cfy profiles use`
+    command.
 
     Profiles are named according to the IP of the manager they manage.
     """
@@ -65,8 +64,7 @@ def show(logger):
     active_profile_name = env.get_active_profile()
     if active_profile_name == 'local':
         logger.info("You're currently working in local mode. "
-                    "To use a manager run `cfy profiles use MANAGER_IP`"
-                    " or bootstrap one")
+                    "To use a manager run `cfy profiles use MANAGER_IP`")
         return
 
     active_profile = _get_profile(env.get_active_profile())
@@ -98,8 +96,7 @@ def list(logger):
     if not profile_names:
         logger.info(
             'No profiles found. You can create a new profile '
-            'by bootstrapping a manager via `cfy bootstrap` or using an '
-            'existing manager via the `cfy profiles use` command')
+            'by using an existing manager via the `cfy profiles use` command')
 
 
 @profiles.command(name='use',
@@ -234,23 +231,6 @@ def _create_profile(
     )
 
 
-@profiles.command(name='purge-incomplete',
-                  short_help='Purge profiles in incomplete bootstrap state')
-@cfy.options.verbose()
-@cfy.pass_logger
-def purge_incomplete(logger):
-    """Purge all profiles for which the bootstrap state is incomplete
-    """
-    logger.info('Purging incomplete bootstrap profiles...')
-    profile_names = env.get_profile_names()
-    for profile in profile_names:
-        context = env.get_profile_context(profile)
-        if context.bootstrap_state == 'Incomplete':
-            logger.debug('Deleteing profiles {0}...'.format(profile))
-            env.delete_profile(profile)
-    logger.info('Purge complete')
-
-
 @profiles.command(name='delete',
                   short_help='Delete a profile')
 @cfy.argument('profile-name')
@@ -314,17 +294,7 @@ def set_profile(profile_name,
         logger.info('Setting tenant to `{0}`'.format(manager_tenant))
         env.profile.manager_tenant = manager_tenant
     if ssl is not None:
-        ssl = str(ssl).lower()
-        if ssl == 'on':
-            logger.info('Enabling SSL in the local profile')
-            env.profile.rest_port = constants.SECURED_REST_PORT
-            env.profile.rest_protocol = constants.SECURED_REST_PROTOCOL
-        elif ssl == 'off':
-            logger.info('Disabling SSL in the local profile')
-            env.profile.rest_port = constants.DEFAULT_REST_PORT
-            env.profile.rest_protocol = constants.DEFAULT_REST_PROTOCOL
-        else:
-            raise CloudifyCliError('SSL must be either `on` or `off`')
+        _set_profile_ssl(ssl, logger)
     if rest_certificate:
         logger.info(
             'Setting rest certificate to `{0}`'.format(rest_certificate))
@@ -344,6 +314,31 @@ def set_profile(profile_name,
         env.set_active_profile(profile_name)
         env.delete_profile(old_name)
     logger.info('Settings saved successfully')
+
+
+def _set_profile_ssl(ssl, logger):
+    ssl = str(ssl).lower()
+    if ssl == 'on':
+        logger.info('Enabling SSL in the local profile')
+        port = constants.SECURED_REST_PORT
+        protocol = constants.SECURED_REST_PROTOCOL
+    elif ssl == 'off':
+        logger.info('Disabling SSL in the local profile')
+        port = constants.DEFAULT_REST_PORT
+        protocol = constants.DEFAULT_REST_PROTOCOL
+    else:
+        raise CloudifyCliError('SSL must be either `on` or `off`')
+
+    env.profile.rest_port = port
+    env.profile.rest_protocol = protocol
+
+    if env.profile.cluster:
+        for node in env.profile.cluster:
+            node['rest_port'] = port
+            node['rest_protocol'] = protocol
+            node['trust_all'] = True
+            logger.info('Enabling SSL for {0} without certificate validation'
+                        .format(node['manager_ip']))
 
 
 @profiles.command(
@@ -750,7 +745,6 @@ def _set_profile_context(profile_name,
     profile.ssh_port = ssh_port or constants.REMOTE_EXECUTION_PORT
     profile.rest_protocol = rest_protocol
     profile.rest_certificate = rest_certificate
-    profile.bootstrap_state = 'Complete'
 
     profile.save()
 

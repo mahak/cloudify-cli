@@ -52,8 +52,7 @@ def get(node_instance_id, logger, client, tenant_name):
 
     `NODE_INSTANCE_ID` is the id of the node-instance to get information on.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('Retrieving node instance {0}'.format(node_instance_id))
     try:
         node_instance = client.node_instances.get(node_instance_id)
@@ -83,6 +82,9 @@ def get(node_instance_id, logger, client, tenant_name):
 @cfy.options.tenant_name_for_list(
     required=False, resource_name_for_help='node-instance')
 @cfy.options.all_tenants
+@cfy.options.search
+@cfy.options.pagination_offset
+@cfy.options.pagination_size
 @cfy.options.verbose()
 @cfy.pass_logger
 @cfy.pass_client()
@@ -91,6 +93,9 @@ def list(deployment_id,
          sort_by,
          descending,
          all_tenants,
+         search,
+         pagination_offset,
+         pagination_size,
          logger,
          client,
          tenant_name):
@@ -99,8 +104,7 @@ def list(deployment_id,
     If `DEPLOYMENT_ID` is provided, list node-instances for that deployment.
     Otherwise, list node-instances for all deployments.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     try:
         if deployment_id:
             logger.info('Listing instances for deployment {0}...'.format(
@@ -112,7 +116,10 @@ def list(deployment_id,
             node_name=node_name,
             sort=sort_by,
             is_descending=descending,
-            _all_tenants=all_tenants)
+            _all_tenants=all_tenants,
+            _search=search,
+            _offset=pagination_offset,
+            _size=pagination_size)
     except CloudifyClientError as e:
         if e.status_code != 404:
             raise
@@ -120,6 +127,9 @@ def list(deployment_id,
             deployment_id))
 
     print_data(NODE_INSTANCE_COLUMNS, node_instances, 'Node-instances:')
+    total = node_instances.metadata.pagination.total
+    logger.info('Showing {0} of {1} node-instances'
+                .format(len(node_instances), total))
 
 
 @cfy.command(name='node-instances',

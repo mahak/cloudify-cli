@@ -104,8 +104,8 @@ def assert_manager_active():
     if not is_manager_active():
         raise CloudifyCliError(
             'This command is only available when using a manager. '
-            'You can either bootstrap a manager or run `cfy profiles use '
-            'MANAGER_IP`')
+            'Please use the `cfy profiles use` command to connect '
+            'to a Cloudify Manager.')
 
 
 def assert_local_active():
@@ -236,14 +236,6 @@ def get_rest_client(client_profile=None,
 
     if not password:
         raise CloudifyCliError('Command failed: Missing password')
-
-    if rest_protocol == constants.SECURED_REST_PROTOCOL and \
-            (not rest_cert or not os.path.isfile(rest_cert)):
-        raise CloudifyCliError('Command failed: Trying to work with https '
-                               'protocol without certificate. Make sure '
-                               '`rest_certificate` is defined in your profile '
-                               'to be the path to the valid rest public '
-                               'certificate file')
 
     if cluster:
         client = CloudifyClusterClient(
@@ -407,7 +399,6 @@ class ProfileContext(yaml.YAMLObject):
         # Note that __init__ is not called when loading from yaml.
         # When adding a new ProfileContext attribute, make sure that
         # all methods handle the case when the attribute is missing
-        self.bootstrap_state = 'Incomplete'
         self._profile_name = profile_name
         self.manager_ip = None
         self.ssh_key = None
@@ -425,7 +416,6 @@ class ProfileContext(yaml.YAMLObject):
     def to_dict(self):
         return dict(
             name=self.profile_name,
-            bootstrap_state=self.bootstrap_state,
             manager_ip=self.manager_ip,
             ssh_key_path=self.ssh_key,
             ssh_port=self.ssh_port,
@@ -525,7 +515,7 @@ CLUSTER_NODE_ATTRS = ['manager_ip', 'rest_port', 'rest_protocol', 'ssh_port',
 
 
 class ClusterHTTPClient(HTTPClient):
-    default_timeout_sec = 5
+    default_timeout_sec = (5, None)
 
     def __init__(self, *args, **kwargs):
         profile = kwargs.pop('profile')

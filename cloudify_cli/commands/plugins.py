@@ -75,8 +75,7 @@ def delete(plugin_id, force, logger, client, tenant_name):
 
     `PLUGIN_ID` is the id of the plugin to delete.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('Deleting plugin {0}...'.format(plugin_id))
     client.plugins.delete(plugin_id=plugin_id, force=force)
     logger.info('Plugin deleted')
@@ -108,23 +107,45 @@ def upload(ctx,
     """
     # Test whether the path is a valid URL. If it is, no point in doing local
     # validations - it will be validated on the server side anyway
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
-
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('Creating plugin zip archive..')
-    plugin_path = utils.get_local_path(plugin_path)
-    yaml_path = utils.get_local_path(yaml_path)
-    plugin_path = utils.zip_files([plugin_path, yaml_path])
+    wagon_path = utils.get_local_path(plugin_path, create_temp=True)
+    yaml_path = utils.get_local_path(yaml_path, create_temp=True)
+    zip_path = utils.zip_files([wagon_path, yaml_path])
 
-    progress_handler = utils.generate_progress_handler(plugin_path, '')
+    progress_handler = utils.generate_progress_handler(zip_path, '')
 
     visibility = get_visibility(private_resource, visibility, logger)
     logger.info('Uploading plugin archive (wagon + yaml)..')
-    plugin = client.plugins.upload(plugin_path,
-                                   visibility,
-                                   progress_handler)
-    logger.info("Plugin uploaded. The plugin's id is {0}".format(plugin.id))
-    os.remove(plugin_path)
+    try:
+        plugin = client.plugins.upload(zip_path,
+                                       visibility,
+                                       progress_handler)
+        logger.info("Plugin uploaded. Plugin's id is {0}".format(plugin.id))
+    finally:
+        os.remove(wagon_path)
+        os.remove(yaml_path)
+        os.remove(zip_path)
+
+
+@plugins.command(name='bundle-upload',
+                 short_help='Upload a bundle of plugins [manager only]')
+@cfy.options.plugins_bundle_path
+@cfy.pass_client()
+@cfy.pass_logger
+def upload_caravan(client, logger, path):
+    if not path:
+        logger.info("Starting upload of plugins bundle, "
+                    "this may take few minutes to complete.")
+        path = 'http://repository.cloudifysource.org/' \
+               'cloudify/wagons/cloudify-plugins-bundle.tgz'
+    progress = utils.generate_progress_handler(path, '')
+    plugins_ = client.plugins.upload(path, progress_callback=progress)
+    logger.info("Bundle uploaded, {0} Plugins installed."
+                .format(len(plugins_)))
+    if len(plugins_) > 0:
+        logger.info("The plugins' ids are:\n{0}\n".
+                    format('\n'.join([p.id for p in plugins_])))
 
 
 @plugins.command(name='download',
@@ -140,8 +161,7 @@ def download(plugin_id, output_path, logger, client, tenant_name):
 
     `PLUGIN_ID` is the id of the plugin to download.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('Downloading plugin {0}...'.format(plugin_id))
     plugin_name = output_path if output_path else plugin_id
     progress_handler = utils.generate_progress_handler(plugin_name, '')
@@ -165,8 +185,7 @@ def get(plugin_id, logger, client, tenant_name, get_data):
 
     `PLUGIN_ID` is the id of the plugin to get information on.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('Retrieving plugin {0}...'.format(plugin_id))
     plugin = client.plugins.get(plugin_id, _get_data=get_data)
     _transform_plugin_response(plugin)
@@ -181,8 +200,11 @@ def get(plugin_id, logger, client, tenant_name, get_data):
 @cfy.options.tenant_name_for_list(
     required=False, resource_name_for_help='plugin')
 @cfy.options.all_tenants
+@cfy.options.search
 @cfy.options.verbose()
 @cfy.options.get_data
+@cfy.options.pagination_offset
+@cfy.options.pagination_size
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
@@ -190,22 +212,30 @@ def list(sort_by,
          descending,
          tenant_name,
          all_tenants,
+         search,
+         pagination_offset,
+         pagination_size,
          logger,
          client,
          get_data):
     """List all plugins on the manager
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('Listing all plugins...')
     plugins_list = client.plugins.list(sort=sort_by,
                                        is_descending=descending,
                                        _all_tenants=all_tenants,
-                                       _get_data=get_data)
+                                       _search=search,
+                                       _get_data=get_data,
+                                       _offset=pagination_offset,
+                                       _size=pagination_size)
     for plugin in plugins_list:
         _transform_plugin_response(plugin)
     columns = PLUGIN_COLUMNS + GET_DATA_COLUMNS if get_data else PLUGIN_COLUMNS
     print_data(columns, plugins_list, 'Plugins:')
+    total = plugins_list.metadata.pagination.total
+    logger.info('Showing {0} of {1} plugins'.format(len(plugins_list),
+                                                    total))
 
 
 def _transform_plugin_response(plugin):

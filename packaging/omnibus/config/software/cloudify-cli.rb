@@ -17,8 +17,8 @@
 # These options are required for all software definitions
 name "cloudify-cli"
 
-ENV['CORE_BRANCH'] || raise('CORE_BRANCH environment variable not set')
-default_version ENV['CORE_BRANCH']
+ENV['CLI_BRANCH'] || raise('CLI_BRANCH environment variable not set')
+default_version ENV['CLI_BRANCH']
 
 ENV['GITHUB_USERNAME'] || raise('GITHUB_USERNAME environment variable not set (required for private repo)')
 ENV['GITHUB_PASSWORD'] || raise('GITHUB_PASSWORD environment variable not set (required for private repo)')
@@ -46,11 +46,7 @@ build do
              "-r", "dev-requirements.txt"]
 
     command ["#{install_dir}/embedded/bin/pip",
-             "install", "--build=#{project_dir}/fabric-plugin", ".", "https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.5.1.zip"]
-
-
-    command ["#{install_dir}/embedded/bin/pip",
-             "install", "--build=#{project_dir}/script-plugin", ".", "https://github.com/cloudify-cosmo/cloudify-script-plugin/archive/1.5.2.zip"]
+             "install", "--build=#{project_dir}/fabric-plugin", ".", "https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.5.2.zip"]
 
   end
 end

@@ -96,6 +96,12 @@ def _tenant_help_message(message, message_template, resource_name):
     return helptexts.TENANT
 
 
+def _get_validate_callback(validate):
+    if validate:
+        return validate_name
+    return None
+
+
 def show_version(ctx, param, value):
     if not value or ctx.resilient_parsing:
         return
@@ -166,6 +172,18 @@ def validate_password(ctx, param, value):
     if not value:
         raise CloudifyValidationError('ERROR: The password is empty')
 
+    return value
+
+
+def validate_nonnegative_integer(ctx, param, value):
+    if ctx.resilient_parsing:
+        return
+
+    try:
+        assert int(value) >= 0
+    except (ValueError, AssertionError):
+        raise CloudifyValidationError('ERROR: {0} is expected to be a '
+                                      'nonnegative integer'.format(param.name))
     return value
 
 
@@ -443,10 +461,23 @@ class Options(object):
             help=helptexts.ALL_TENANTS,
         )
 
+        self.search = click.option(
+            '--search',
+            default=None,
+            required=False,
+            help=helptexts.SEARCH,
+        )
+
         self.include_logs = click.option(
             '--include-logs/--no-logs',
             default=True,
             help=helptexts.INCLUDE_LOGS)
+
+        self.dry_run = click.option(
+            '--dry-run',
+            is_flag=True,
+            help=helptexts.DRY_RUN
+        )
 
         self.json_output = click.option(
             '--json-output',
@@ -456,34 +487,9 @@ class Options(object):
         self.tail = click.option(
             '--tail',
             is_flag=True,
+            cls=MutuallyExclusiveOption,
+            mutually_exclusive=['pagination_offset', 'pagination_size'],
             help=helptexts.TAIL_OUTPUT)
-
-        self.validate_only = click.option(
-            '--validate-only',
-            is_flag=True,
-            help=helptexts.VALIDATE_ONLY)
-
-        self.skip_validations = click.option(
-            '--skip-validations',
-            is_flag=True,
-            help=helptexts.SKIP_BOOTSTRAP_VALIDATIONS)
-
-        self.skip_sanity = click.option(
-            '--skip-sanity',
-            is_flag=True,
-            default=False,
-            help=helptexts.SKIP_BOOTSTRAP_SANITY)
-
-        self.keep_up_on_failure = click.option(
-            '--keep-up-on-failure',
-            is_flag=True,
-            help=helptexts.KEEP_UP_ON_FAILURE)
-
-        self.dont_save_password_in_profile = click.option(
-            '--dont-save-password-in-profile',
-            is_flag=True,
-            default=False,
-            help=helptexts.DONT_SAVE_PASSWORD_IN_PROFILE)
 
         self.validate = click.option(
             '--validate',
@@ -504,12 +510,6 @@ class Options(object):
             '--backup-first',
             is_flag=True,
             help=helptexts.BACKUP_LOGS_FIRST)
-
-        self.manager_ip = click.option(
-            '-t',
-            '--manager-ip',
-            required=False,
-            help=helptexts.MANAGEMENT_IP)
 
         self.ssh_user = click.option(
             '-s',
@@ -658,11 +658,6 @@ class Options(object):
             '--node-name',
             required=False,
             help=helptexts.NODE_NAME)
-
-        self.snapshot_id = click.option(
-            '-s',
-            '--snapshot-id',
-            help=helptexts.SNAPSHOT_ID)
 
         self.without_deployment_envs = click.option(
             '--without-deployment-envs',
@@ -821,17 +816,38 @@ class Options(object):
             required=False,
             help=helptexts.SECRET_STRING)
 
-        self.secret_file = click.option(
-            '-f',
-            '--secret-file',
-            required=False,
-            help=helptexts.SECRET_FILE)
-
         self.secret_update_if_exists = click.option(
             '-u',
             '--update-if-exists',
             is_flag=True,
+            cls=MutuallyExclusiveOption,
+            mutually_exclusive=['hidden_value', 'visibility'],
             help=helptexts.SECRET_UPDATE_IF_EXISTS,
+        )
+
+        self.hidden_value = click.option(
+            '--hidden-value',
+            is_flag=True,
+            default=False,
+            help=helptexts.HIDDEN_VALUE,
+        )
+
+        self.update_hidden_value = click.option(
+            '--hidden-value/--not-hidden-value',
+            default=None,
+            help=helptexts.HIDDEN_VALUE)
+
+        self.update_visibility = click.option(
+            '-l',
+            '--visibility',
+            help=helptexts.VISIBILITY.format(VisibilityState.STATES)
+        )
+
+        self.plugins_bundle_path = click.option(
+            '-p',
+            '--path',
+            required=False,
+            help=helptexts.PLUGINS_BUNDLE_PATH
         )
 
         # same as --inputs, name changed for consistency
@@ -841,6 +857,39 @@ class Options(object):
             multiple=True,
             callback=inputs_callback,
             help=helptexts.CLUSTER_NODE_OPTIONS)
+
+        self.pagination_offset = click.option(
+            '-o',
+            '--pagination-offset',
+            required=False,
+            default=0,
+            callback=validate_nonnegative_integer,
+            help=helptexts.PAGINATION_OFFSET)
+
+        self.pagination_size = click.option(
+            '-s',
+            '--pagination-size',
+            required=False,
+            default=1000,
+            callback=validate_nonnegative_integer,
+            help=helptexts.PAGINATION_SIZE)
+
+        self.manager_rest_token = click.option(
+            '--manager_rest_token',
+            required=True,
+            help=helptexts.MANAGER_REST_TOKEN
+        )
+
+    @staticmethod
+    def secret_file():
+        return click.option(
+            '-f',
+            '--secret-file',
+            required=False,
+            cls=MutuallyExclusiveOption,
+            mutually_exclusive=['secret_string'],
+            help=helptexts.SECRET_FILE
+        )
 
     @staticmethod
     def include_keys(help):
@@ -952,15 +1001,15 @@ class Options(object):
             help=help)
 
     @staticmethod
-    def blueprint_filename():
+    def blueprint_filename(extra_message=''):
         return click.option(
             '-n',
             '--blueprint-filename',
             default=DEFAULT_BLUEPRINT_PATH,
-            help=helptexts.BLUEPRINT_FILENAME)
+            help=helptexts.BLUEPRINT_FILENAME + extra_message)
 
     @staticmethod
-    def workflow_id(default):
+    def workflow_id(default=None):
         return click.option(
             '-w',
             '--workflow-id',
@@ -1008,12 +1057,22 @@ class Options(object):
             help=helptexts.OPERATION_TIMEOUT.format(default))
 
     @staticmethod
-    def deployment_id(required=False):
+    def deployment_id(required=False, validate=False):
         return click.option(
             '-d',
             '--deployment-id',
             required=required,
-            help=helptexts.DEPLOYMENT_ID)
+            help=helptexts.DEPLOYMENT_ID,
+            callback=_get_validate_callback(validate))
+
+    @staticmethod
+    def snapshot_id(required=False, validate=False):
+        return click.option(
+            '-s',
+            '--snapshot-id',
+            required=required,
+            help=helptexts.SNAPSHOT_ID,
+            callback=_get_validate_callback(validate))
 
     @staticmethod
     def execution_id(required=False):
@@ -1024,7 +1083,9 @@ class Options(object):
             help=helptexts.EXECUTION_ID)
 
     @staticmethod
-    def blueprint_id(required=False, multiple_blueprints=False):
+    def blueprint_id(required=False,
+                     multiple_blueprints=False,
+                     validate=False):
         def pass_empty_blueprint_id(func):
             @wraps(func)
             def wrapper(*args, **kwargs):
@@ -1040,7 +1101,8 @@ class Options(object):
                 '-b',
                 '--blueprint-id',
                 required=required,
-                help=helptexts.BLUEPRINT_ID)
+                help=helptexts.BLUEPRINT_ID,
+                callback=_get_validate_callback(validate))
 
     @staticmethod
     def blueprint_path(required=False):
@@ -1048,7 +1110,8 @@ class Options(object):
             '-p',
             '--blueprint-path',
             required=required,
-            type=click.Path(exists=True))
+            type=click.Path(exists=True),
+            help=helptexts.BLUEPRINT_PATH)
 
     @staticmethod
     def tenant_role(help_text, required=False):
@@ -1070,7 +1133,9 @@ class Options(object):
             helptexts.GROUP_TENANT_ROLE, required=True)
 
     @staticmethod
-    def visibility(required=False, valid_values=VisibilityState.STATES):
+    def visibility(required=False,
+                   valid_values=VisibilityState.STATES,
+                   mutually_exclusive_required=True):
         args = ['-l', '--visibility']
         kwargs = {
             'required': required,
@@ -1078,9 +1143,10 @@ class Options(object):
         }
         if not required:
             kwargs['default'] = VisibilityState.TENANT
-            kwargs['cls'] = MutuallyExclusiveOption
-            kwargs['mutually_exclusive'] = ['private_resource']
             kwargs['help'] += ' [default: tenant]'
+            if mutually_exclusive_required:
+                kwargs['cls'] = MutuallyExclusiveOption
+                kwargs['mutually_exclusive'] = ['private_resource']
         return click.option(*args, **kwargs)
 
     @staticmethod
@@ -1090,6 +1156,29 @@ class Options(object):
             '--yaml-path',
             required=True,
             help=helptexts.PLUGIN_YAML_PATH)
+
+    @staticmethod
+    def manager_ip(required=False):
+
+        if required:  # cfy agents transfer mode
+            help_text = helptexts.MANAGER_IP_TRANSFER_MODE
+        else:  # cfy agents install mode
+            help_text = helptexts.MANAGER_IP_INSTALL_MODE
+        args = ['--manager-ip']
+        kwargs = {'required': required,
+                  'help': help_text}
+        return click.option(*args, **kwargs)
+
+    @staticmethod
+    def manager_certificate(required=False):
+        if required:  # cfy agents transfer mode
+            help_text = helptexts.MANAGER_CERTIFICATE_PATH_TRANSFER_MODE
+        else:  # cfy agents install mode
+            help_text = helptexts.MANAGER_CERTIFICATE_PATH_INSTALL_MODE
+        args = ['--manager_certificate']
+        kwargs = {'required': required,
+                  'help': help_text}
+        return click.option(*args, **kwargs)
 
 
 options = Options()

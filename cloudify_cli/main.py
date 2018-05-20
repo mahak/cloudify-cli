@@ -14,7 +14,6 @@
 # limitations under the License.
 ############
 
-
 from . import env
 from . import logger
 from .cli import cfy
@@ -30,6 +29,7 @@ from .commands import agents
 from .commands import events
 from .commands import groups
 from .commands import status
+from .commands import tokens
 from .commands import cluster
 from .commands import install
 from .commands import plugins
@@ -94,7 +94,7 @@ def _register_commands():
     _cfy.add_command(user_groups.user_groups)
     _cfy.add_command(maintenance_mode.maintenance_mode)
     _cfy.add_command(secrets.secrets)
-
+    _cfy.add_command(tokens.tokens)
     _cfy.add_command(nodes.nodes)
     _cfy.add_command(groups.groups)
 
@@ -107,6 +107,8 @@ def _register_commands():
     deployments.deployments.add_command(deployments.manager_delete)
     deployments.deployments.add_command(deployments.manager_update)
     deployments.deployments.add_command(deployments.manager_list)
+    deployments.deployments.add_command(deployments.manager_history)
+    deployments.deployments.add_command(deployments.manager_get_update)
     deployments.deployments.add_command(deployments.manager_set_visibility)
 
     executions.executions.add_command(executions.manager_cancel)

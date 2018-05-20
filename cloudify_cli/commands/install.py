@@ -14,28 +14,30 @@
 # limitations under the License.
 ############
 
-
 import os
 import shutil
 
-from . import init
-from ..cli import cfy
-from . import executions
-from . import blueprints
-from .. import blueprint
-from . import deployments
+from ..cli import cfy, helptexts
 from ..constants import DEFAULT_INSTALL_WORKFLOW
+from ..blueprint import get_blueprint_path_and_id
+from . import init, executions, blueprints, deployments
+from cloudify_rest_client.constants import VISIBILITY_EXCEPT_GLOBAL
 
 
 @cfy.command(name='install',
              short_help='Install an application blueprint [manager only]')
 @cfy.argument('blueprint-path')
-@cfy.options.blueprint_id()
+@cfy.options.blueprint_id(validate=True)
 @cfy.options.blueprint_filename()
 @cfy.options.validate
-@cfy.options.deployment_id()
+@cfy.options.deployment_id(validate=True)
 @cfy.options.inputs
 @cfy.options.workflow_id('install')
+@cfy.options.force(help=helptexts.FORCE_CONCURRENT_EXECUTION)
+@cfy.options.visibility(valid_values=VISIBILITY_EXCEPT_GLOBAL)
+@cfy.options.tenant_name(required=False,
+                         resource_name_for_help='blueprint and deployment')
+@cfy.options.skip_plugins_validation
 @cfy.options.parameters
 @cfy.options.allow_custom_parameters
 @cfy.options.timeout()
@@ -51,6 +53,10 @@ def manager(ctx,
             deployment_id,
             inputs,
             workflow_id,
+            force,
+            visibility,
+            tenant_name,
+            skip_plugins_validation,
             parameters,
             allow_custom_parameters,
             timeout,
@@ -67,7 +73,7 @@ def manager(ctx,
     This will upload the blueprint, create a deployment and execute the
     `install` workflow.
     """
-    processed_blueprint_path, blueprint_id = _get_blueprint_path_and_id(
+    processed_blueprint_path, blueprint_id = get_blueprint_path_and_id(
         blueprint_path,
         blueprint_filename,
         blueprint_id
@@ -75,19 +81,16 @@ def manager(ctx,
     deployment_id = deployment_id or blueprint_id
     workflow_id = workflow_id or DEFAULT_INSTALL_WORKFLOW
 
-    # Although the `install` command does not need the `force` argument,
-    # we *are* using the `executions start` handler as a part of it.
-    # as a result, we need to provide it with a `force` argument, which is
-    # defined below.
-    force = False
-
     try:
         ctx.invoke(
             blueprints.upload,
             blueprint_path=processed_blueprint_path,
             blueprint_id=blueprint_id,
             blueprint_filename=blueprint_filename,
-            validate=validate)
+            validate=validate,
+            visibility=visibility,
+            tenant_name=tenant_name
+        )
     finally:
         # Every situation other than the user providing a path of a local
         # yaml means a temp folder will be created that should be later
@@ -99,7 +102,11 @@ def manager(ctx,
         deployments.manager_create,
         blueprint_id=blueprint_id,
         deployment_id=deployment_id,
-        inputs=inputs)
+        inputs=inputs,
+        visibility=visibility,
+        tenant_name=tenant_name,
+        skip_plugins_validation=skip_plugins_validation
+    )
     ctx.invoke(
         executions.manager_start,
         workflow_id=workflow_id,
@@ -109,14 +116,17 @@ def manager(ctx,
         allow_custom_parameters=allow_custom_parameters,
         include_logs=include_logs,
         parameters=parameters,
-        json_output=json_output)
+        json_output=json_output,
+        tenant_name=tenant_name
+    )
 
 
 @cfy.command(name='install',
              short_help='Install an application blueprint [locally]')
 @cfy.argument('blueprint-path')
 @cfy.options.blueprint_filename()
-@cfy.options.blueprint_id(required=False, multiple_blueprints=True)
+@cfy.options.blueprint_id(
+    required=False, multiple_blueprints=True, validate=True)
 @cfy.options.inputs
 @cfy.options.validate
 @cfy.options.install_plugins
@@ -152,7 +162,7 @@ def local(ctx,
     Supported archive types are: zip, tar, tar.gz and tar.bz2
 
     """
-    processed_blueprint_path, blueprint_id = _get_blueprint_path_and_id(
+    processed_blueprint_path, blueprint_id = get_blueprint_path_and_id(
         blueprint_path,
         blueprint_filename,
         blueprint_id
@@ -187,20 +197,3 @@ def local(ctx,
         task_retries=task_retries,
         task_retry_interval=task_retry_interval,
         task_thread_pool_size=task_thread_pool_size)
-
-
-def _get_blueprint_path_and_id(blueprint_path,
-                               blueprint_filename,
-                               blueprint_id):
-    processed_blueprint_path = blueprint.get(
-        blueprint_path,
-        blueprint_filename,
-        download=True,
-    )
-
-    blueprint_id = blueprint_id or blueprint.generate_id(
-        processed_blueprint_path,
-        blueprint_filename
-    )
-
-    return processed_blueprint_path, blueprint_id

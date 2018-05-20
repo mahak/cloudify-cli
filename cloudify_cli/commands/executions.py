@@ -33,9 +33,10 @@ _STATUS_CANCELING_MESSAGE = (
     'NOTE: Executions currently in a "canceling/force-canceling" status '
     'may take a while to change into "cancelled"')
 
-EXECUTION_COLUMNS = ['id', 'workflow_id', 'status', 'deployment_id',
+EXECUTION_COLUMNS = ['id', 'workflow_id', 'status_display', 'deployment_id',
                      'created_at', 'error', 'visibility', 'tenant_name',
                      'created_by']
+EXECUTION_TABLE_LABELS = {'status_display': 'status'}
 
 
 @cfy.group(name='executions')
@@ -59,8 +60,7 @@ def manager_get(execution_id, logger, client, tenant_name):
 
     `EXECUTION_ID` is the execution to get information on.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     try:
         logger.info('Retrieving execution {0}'.format(execution_id))
         execution = client.executions.get(execution_id)
@@ -69,7 +69,8 @@ def manager_get(execution_id, logger, client, tenant_name):
             raise
         raise CloudifyCliError('Execution {0} not found'.format(execution_id))
 
-    print_data(EXECUTION_COLUMNS, execution, 'Execution:', max_width=50)
+    print_data(EXECUTION_COLUMNS, execution, 'Execution:', max_width=50,
+               labels=EXECUTION_TABLE_LABELS)
 
     # print execution parameters
     logger.info('Execution Parameters:')
@@ -90,6 +91,8 @@ def manager_get(execution_id, logger, client, tenant_name):
 @cfy.options.tenant_name_for_list(
     required=False, resource_name_for_help='execution')
 @cfy.options.all_tenants
+@cfy.options.pagination_offset
+@cfy.options.pagination_size
 @cfy.options.verbose()
 @cfy.assert_manager_active()
 @cfy.pass_client()
@@ -100,6 +103,8 @@ def manager_list(
         sort_by,
         descending,
         all_tenants,
+        pagination_offset,
+        pagination_size,
         logger,
         client,
         tenant_name):
@@ -108,8 +113,7 @@ def manager_list(
     If `DEPLOYMENT_ID` is provided, list executions for that deployment.
     Otherwise, list executions for all deployments.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     try:
         if deployment_id:
             logger.info('Listing executions for deployment {0}...'.format(
@@ -121,7 +125,10 @@ def manager_list(
             include_system_workflows=include_system_workflows,
             sort=sort_by,
             is_descending=descending,
-            _all_tenants=all_tenants)
+            _all_tenants=all_tenants,
+            _offset=pagination_offset,
+            _size=pagination_size
+        )
 
     except exceptions.CloudifyClientError as e:
         if e.status_code != 404:
@@ -129,7 +136,10 @@ def manager_list(
         raise CloudifyCliError('Deployment {0} does not exist'.format(
             deployment_id))
 
-    print_data(EXECUTION_COLUMNS, executions, 'Executions:')
+    print_data(EXECUTION_COLUMNS, executions, 'Executions:',
+               labels=EXECUTION_TABLE_LABELS)
+    total = executions.metadata.pagination.total
+    logger.info('Showing {0} of {1} executions'.format(len(executions), total))
 
     if any(execution.status in (
             execution.CANCELLING, execution.FORCE_CANCELLING)
@@ -147,6 +157,7 @@ def manager_list(
 @cfy.options.timeout()
 @cfy.options.include_logs
 @cfy.options.json_output
+@cfy.options.dry_run
 @cfy.options.verbose()
 @cfy.options.tenant_name(required=False, resource_name_for_help='execution')
 @cfy.assert_manager_active()
@@ -160,6 +171,7 @@ def manager_start(workflow_id,
                   timeout,
                   include_logs,
                   json_output,
+                  dry_run,
                   logger,
                   client,
                   tenant_name):
@@ -167,8 +179,7 @@ def manager_start(workflow_id,
 
     `WORKFLOW_ID` is the id of the workflow to execute (e.g. `uninstall`)
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     events_logger = get_events_logger(json_output)
     events_message = "* Run 'cfy events list -e {0}' to retrieve the " \
                      "execution's events/logs"
@@ -185,7 +196,8 @@ def manager_start(workflow_id,
                 workflow_id,
                 parameters=parameters,
                 allow_custom_parameters=allow_custom_parameters,
-                force=force)
+                force=force,
+                dry_run=dry_run)
         except (exceptions.DeploymentEnvironmentCreationInProgressError,
                 exceptions.DeploymentEnvironmentCreationPendingError) as e:
             # wait for deployment environment creation workflow
@@ -221,7 +233,8 @@ def manager_start(workflow_id,
                                        execution,
                                        events_handler=events_logger,
                                        include_logs=include_logs,
-                                       timeout=timeout)
+                                       timeout=timeout,
+                                       logger=logger)
         if execution.error:
             logger.info('Execution of workflow {0} for deployment '
                         '{1} failed. [error={2}]'.format(
@@ -257,7 +270,7 @@ def manager_start(workflow_id,
             " the running workflow.".format(
                 workflow_id, deployment_id, e.execution_id, original_timeout))
 
-        events_tail_message = "* Run 'cfy events list --tail --include-logs " \
+        events_tail_message = "* Run 'cfy events list --tail " \
                               "--execution-id {0}' to retrieve the " \
                               "execution's events/logs"
         logger.info(events_tail_message.format(e.execution_id))
@@ -278,8 +291,7 @@ def manager_cancel(execution_id, force, logger, client, tenant_name):
 
     `EXECUTION_ID` is the ID of the execution to cancel.
     """
-    if tenant_name:
-        logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
+    utils.explicit_tenant_name_message(tenant_name, logger)
     logger.info('{0}Cancelling execution {1}'.format(
         'Force-' if force else '', execution_id))
     client.executions.cancel(execution_id, force)
