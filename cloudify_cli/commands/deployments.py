@@ -202,9 +202,13 @@ def manager_get_update(deployment_update_id, logger, client, tenant_name):
 @cfy.options.blueprint_filename(' [DEPRECATED]')
 @cfy.options.blueprint_id()
 @cfy.options.inputs
+@cfy.options.reinstall_list
 @cfy.options.workflow_id()
 @cfy.options.skip_install
 @cfy.options.skip_uninstall
+@cfy.options.skip_reinstall
+@cfy.options.ignore_failure
+@cfy.options.install_first
 @cfy.options.force(help=helptexts.FORCE_UPDATE)
 @cfy.options.tenant_name(required=False, resource_name_for_help='deployment')
 @cfy.options.visibility(mutually_exclusive_required=False)
@@ -220,9 +224,13 @@ def manager_update(ctx,
                    deployment_id,
                    blueprint_path,
                    inputs,
+                   reinstall_list,
                    blueprint_filename,
                    skip_install,
                    skip_uninstall,
+                   skip_reinstall,
+                   ignore_failure,
+                   install_first,
                    workflow_id,
                    force,
                    include_logs,
@@ -287,8 +295,12 @@ def manager_update(ctx,
     elif tenant_name:
         logger.info('Explicitly using tenant `{0}`'.format(tenant_name))
 
-    logger.info('Updating deployment {0} using blueprint {1}'.format(
-        deployment_id, blueprint_id))
+    msg = 'Updating deployment {0}'.format(deployment_id)
+    if inputs:
+        msg += ' with new inputs'
+    if blueprint_id:
+        msg += ', using blueprint {1}'
+    logger.info(msg)
     deployment_update = \
         client.deployment_updates.update_with_existing_blueprint(
             deployment_id,
@@ -296,8 +308,12 @@ def manager_update(ctx,
             inputs,
             skip_install,
             skip_uninstall,
+            skip_reinstall,
             workflow_id,
-            force
+            force,
+            ignore_failure,
+            install_first,
+            list(reinstall_list)
         )
     events_logger = get_events_logger(json_output)
     execution = execution_events_fetcher.wait_for_execution(

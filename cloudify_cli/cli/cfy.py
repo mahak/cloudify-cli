@@ -426,6 +426,12 @@ class Options(object):
             callback=inputs_callback,
             help=helptexts.INPUTS)
 
+        self.reinstall_list = click.option(
+            '-r',
+            '--reinstall-list',
+            multiple=True,
+            help=helptexts.REINSTALL_LIST)
+
         self.parameters = click.option(
             '-p',
             '--parameters',
@@ -437,6 +443,12 @@ class Options(object):
             '-o',
             '--output-path',
             help=helptexts.OUTPUT_PATH)
+
+        self.all_nodes = click.option(
+            '--all-nodes',
+            is_flag=True,
+            help=helptexts.ALL_NODES
+        )
 
         self.optional_output_path = click.option(
             '-o',
@@ -505,6 +517,21 @@ class Options(object):
             '--skip-uninstall',
             is_flag=True,
             help=helptexts.SKIP_UNINSTALL)
+
+        self.skip_reinstall = click.option(
+            '--skip-reinstall',
+            is_flag=True,
+            help=helptexts.SKIP_REINSTALL)
+
+        self.ignore_failure = click.option(
+            '--ignore-failure',
+            is_flag=True,
+            help=helptexts.IGNORE_FAILURE)
+
+        self.install_first = click.option(
+            '--install-first',
+            is_flag=True,
+            help=helptexts.INSTALL_FIRST)
 
         self.backup_first = click.option(
             '--backup-first',
