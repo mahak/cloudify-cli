@@ -901,10 +901,23 @@ class Options(object):
             callback=validate_nonnegative_integer,
             help=helptexts.PAGINATION_SIZE)
 
-        self.manager_rest_token = click.option(
-            '--manager_rest_token',
-            required=True,
-            help=helptexts.MANAGER_REST_TOKEN
+        self.manager_ip = click.option(
+            '--manager-ip',
+            required=False,
+            help=helptexts.MANAGER_IP
+        )
+
+        self.manager_certificate = click.option(
+            '--manager_certificate',
+            required=False,
+            help=helptexts.MANAGER_CERTIFICATE_PATH
+        )
+
+        self.stop_old_agent = click.option(
+            '--stop-old-agent',
+            is_flag=True,
+            default=False,
+            help=helptexts.STOP_OLD_AGENT
         )
 
     @staticmethod
@@ -1028,6 +1041,14 @@ class Options(object):
             help=help)
 
     @staticmethod
+    def kill():
+        return click.option(
+            '-k',
+            '--kill',
+            is_flag=True,
+            help=helptexts.KILL_EXECUTION)
+
+    @staticmethod
     def blueprint_filename(extra_message=''):
         return click.option(
             '-n',
@@ -1141,18 +1162,20 @@ class Options(object):
             help=helptexts.BLUEPRINT_PATH)
 
     @staticmethod
-    def tenant_role(help_text, required=False):
-        return click.option(
-            '-r',
-            '--role',
-            required=required,
-            help=help_text
-        )
+    def tenant_role(help_text, required, options_flags=None):
+        args = options_flags or ['-r', '--role']
+
+        kwargs = {
+            'required': required,
+            'help': help_text
+        }
+        return click.option(*args, **kwargs)
 
     @staticmethod
-    def user_tenant_role():
+    def user_tenant_role(required=True, options_flags=None):
         return Options.tenant_role(
-            helptexts.USER_TENANT_ROLE, required=True)
+            helptexts.USER_TENANT_ROLE, required=required,
+            options_flags=options_flags)
 
     @staticmethod
     def group_tenant_role():
@@ -1183,29 +1206,6 @@ class Options(object):
             '--yaml-path',
             required=True,
             help=helptexts.PLUGIN_YAML_PATH)
-
-    @staticmethod
-    def manager_ip(required=False):
-
-        if required:  # cfy agents transfer mode
-            help_text = helptexts.MANAGER_IP_TRANSFER_MODE
-        else:  # cfy agents install mode
-            help_text = helptexts.MANAGER_IP_INSTALL_MODE
-        args = ['--manager-ip']
-        kwargs = {'required': required,
-                  'help': help_text}
-        return click.option(*args, **kwargs)
-
-    @staticmethod
-    def manager_certificate(required=False):
-        if required:  # cfy agents transfer mode
-            help_text = helptexts.MANAGER_CERTIFICATE_PATH_TRANSFER_MODE
-        else:  # cfy agents install mode
-            help_text = helptexts.MANAGER_CERTIFICATE_PATH_INSTALL_MODE
-        args = ['--manager_certificate']
-        kwargs = {'required': required,
-                  'help': help_text}
-        return click.option(*args, **kwargs)
 
 
 options = Options()

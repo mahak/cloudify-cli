@@ -333,12 +333,18 @@ def _set_profile_ssl(ssl, logger):
     env.profile.rest_protocol = protocol
 
     if env.profile.cluster:
+        missing_certs = []
         for node in env.profile.cluster:
             node['rest_port'] = port
             node['rest_protocol'] = protocol
-            node['trust_all'] = True
-            logger.info('Enabling SSL for {0} without certificate validation'
-                        .format(node['manager_ip']))
+            logger.info('Enabling SSL for {0}'.format(node['manager_ip']))
+            if not node.get('cert'):
+                missing_certs.append(node['name'])
+        if missing_certs:
+            logger.warning('The following cluster nodes have no certificate '
+                           'set: {0}'.format(', '.join(missing_certs)))
+            logger.warning('If required, set the certificates for those '
+                           'nodes using `cfy profiles set-cluster`')
 
 
 @profiles.command(
@@ -420,13 +426,18 @@ def set_cluster(cluster_node_name,
         (ssh_user, 'ssh_user', 'ssh user'),
         (ssh_key, 'ssh_key', 'ssh key'),
         (ssh_port, 'ssh_port', 'ssh port'),
-        (rest_certificate, 'cert', 'rest certificate'),
     ]:
         if source:
             changed_node[target] = source
             logger.info('Node {0}: setting {1} to `{2}`'
                         .format(cluster_node_name, label, source))
-
+    if rest_certificate:
+        changed_node['cert'] = rest_certificate
+        changed_node['trust_all'] = False
+        changed_node['rest_protocol'] = 'https'
+        logger.info('Node {0}: setting rest-certificate to `{1}` and enabling '
+                    'certificate verification'
+                    .format(cluster_node_name, source))
     env.profile.save()
     logger.info('Settings saved successfully')
 
@@ -473,7 +484,7 @@ def unset(manager_username,
         tenant = env.profile.manager_tenant
     if rest_certificate:
         cert = os.environ.get(constants.LOCAL_REST_CERT_FILE) \
-               or env.get_default_rest_cert_local_path()
+            or env.get_default_rest_cert_local_path()
     else:
         cert = None
 

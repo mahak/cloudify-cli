@@ -108,6 +108,11 @@ FORCE_CANCEL_EXECUTION = (
     "Terminate the execution abruptly, rather than request an orderly "
     "termination"
 )
+KILL_EXECUTION = (
+    "Terminate the execution abruptly, and also stop currently running tasks. "
+    "This will stop all processes running operations and workflows for the "
+    "given execution."
+)
 
 INIT_LOCAL = "Initialize environment for local executions"
 NODE_NAME = "The node's name"
@@ -187,8 +192,8 @@ GROUP_TENANT_ROLE = (
     'Role assigned to the users of group in the context of the tenant.'
 )
 
-SECURITY_ROLE = "A role to determine the user's permissions on the manager " \
-                "(default: default)"
+SECURITY_ROLE = "A role to determine the user's permissions on the manager, " \
+                "if admin or default (default: default role)"
 PASSWORD = 'Cloudify manager password'
 
 CLUSTER_HOST_IP = \
@@ -239,7 +244,7 @@ GET_DATA = 'When set to True, displays the full list of connected resources ' \
 PROFILE_NAME = 'Name of the profile to use'
 SECRET_VALUE = "The secret's value to be set"
 SECRET_STRING = "The string to use as the secret's value"
-SECRET_FILE = "The secret's file to use its content as value to be set"
+SECRET_FILE = "The file with the contents of the secret"
 SECRET_UPDATE_IF_EXISTS = 'Update secret value if secret key already ' \
                           'exists. [This option is deprecated; use cfy ' \
                           'secrets update command instead]'
@@ -263,23 +268,17 @@ PAGINATION_OFFSET = 'The number of resources to skip; --pagination-offset=1 ' \
 DRY_RUN = 'If set, no actual operations will be performed. This ' \
           'only prints the executed tasks, without side effects'
 
-MANAGER_IP_TRANSFER_MODE = 'The private IP of the new Cloudify Manger.' \
-             ' This is the IP through which the agents connect to the Manager.'
-MANAGER_CERTIFICATE_PATH_TRANSFER_MODE = 'A path to a file containing the' \
-                                         ' SSL certificate of the new' \
-                                         ' Cloudify Manager. The certificate' \
-                                         ' is available on the Manager: ' \
-                                         '/etc/cloudify/ssl/' \
-                                         'cloudify_internal_ca_cert.pem'
+MANAGER_IP = "The private IP of the current leader (master) Manager. This " \
+             "IP is used to connect to the Manager's RabbitMQ. " \
+             "(relevant only in HA cluster)"
+MANAGER_CERTIFICATE_PATH = 'A path to a file containing the SSL certificate ' \
+                           'of the current leader Manager. The certificate ' \
+                           'is available on the Manager: ' \
+                           '/etc/cloudify/ssl/cloudify_internal_ca_cert.pem'
 MANAGER_REST_TOKEN = 'The REST token of the new Cloudify Manager.' \
                      ' Acquire the token by running `cfy tokens get` while' \
                      ' using the new Manager.'
-MANAGER_IP_INSTALL_MODE = "The private IP of the current leader (master)" \
-                          " Manager. This IP is used to connect to the" \
-                          " Manager's RabbitMQ. (relevant only in HA cluser)"
-MANAGER_CERTIFICATE_PATH_INSTALL_MODE = 'A path to a file containing the SSL' \
-                                         ' certificate of the current leader' \
-                                         ' Manager. The certificate is' \
-                                         ' available on the Manager: ' \
-                                         '/etc/cloudify/ssl/' \
-                                         'cloudify_internal_ca_cert.pem'
+STOP_OLD_AGENT = 'If set, after installing the new agent the old agent ' \
+                 '(that is connected to the old Cloudify Manager) will be ' \
+                 'stopped. *IMPORTANT* if the deployment has monitoring ' \
+                 'with auto-healing configured, you need to disable it first'

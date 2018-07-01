@@ -33,9 +33,13 @@ _STATUS_CANCELING_MESSAGE = (
     'NOTE: Executions currently in a "canceling/force-canceling" status '
     'may take a while to change into "cancelled"')
 
-EXECUTION_COLUMNS = ['id', 'workflow_id', 'status_display', 'deployment_id',
-                     'created_at', 'error', 'visibility', 'tenant_name',
-                     'created_by']
+FULL_EXECUTION_COLUMNS = ['id', 'workflow_id', 'status_display',
+                          'deployment_id', 'created_at', 'ended_at',
+                          'error', 'visibility', 'tenant_name',
+                          'created_by']
+MINIMAL_EXECUTION_COLUMNS = ['id', 'workflow_id', 'status_display',
+                             'deployment_id', 'created_at', 'error',
+                             'visibility', 'tenant_name', 'created_by']
 EXECUTION_TABLE_LABELS = {'status_display': 'status'}
 
 
@@ -69,7 +73,7 @@ def manager_get(execution_id, logger, client, tenant_name):
             raise
         raise CloudifyCliError('Execution {0} not found'.format(execution_id))
 
-    print_data(EXECUTION_COLUMNS, execution, 'Execution:', max_width=50,
+    print_data(FULL_EXECUTION_COLUMNS, execution, 'Execution:', max_width=50,
                labels=EXECUTION_TABLE_LABELS)
 
     # print execution parameters
@@ -136,7 +140,7 @@ def manager_list(
         raise CloudifyCliError('Deployment {0} does not exist'.format(
             deployment_id))
 
-    print_data(EXECUTION_COLUMNS, executions, 'Executions:',
+    print_data(MINIMAL_EXECUTION_COLUMNS, executions, 'Executions:',
                labels=EXECUTION_TABLE_LABELS)
     total = executions.metadata.pagination.total
     logger.info('Showing {0} of {1} executions'.format(len(executions), total))
@@ -281,20 +285,26 @@ def manager_start(workflow_id,
              short_help='Cancel a workflow execution [manager only]')
 @cfy.argument('execution-id')
 @cfy.options.force(help=helptexts.FORCE_CANCEL_EXECUTION)
+@cfy.options.kill()
 @cfy.options.verbose()
 @cfy.options.tenant_name(required=False, resource_name_for_help='execution')
 @cfy.assert_manager_active()
 @cfy.pass_client()
 @cfy.pass_logger
-def manager_cancel(execution_id, force, logger, client, tenant_name):
+def manager_cancel(execution_id, force, kill, logger, client, tenant_name):
     """Cancel a workflow's execution
 
     `EXECUTION_ID` is the ID of the execution to cancel.
     """
     utils.explicit_tenant_name_message(tenant_name, logger)
-    logger.info('{0}Cancelling execution {1}'.format(
-        'Force-' if force else '', execution_id))
-    client.executions.cancel(execution_id, force)
+    if kill:
+        message = 'Killing'
+    elif force:
+        message = 'Force-cancelling'
+    else:
+        message = 'Cancelling'
+    logger.info('{0} execution {1}'.format(message, execution_id))
+    client.executions.cancel(execution_id, force=force, kill=kill)
     logger.info(
         "A cancel request for execution {0} has been sent. "
         "To track the execution's status, use:\n"
