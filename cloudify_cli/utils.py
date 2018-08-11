@@ -16,6 +16,7 @@
 
 import os
 import sys
+import click
 import errno
 import string
 import random
@@ -36,6 +37,19 @@ from .constants import SUPPORTED_ARCHIVE_TYPES
 
 from cloudify_rest_client.constants import VisibilityState
 from cloudify_rest_client.exceptions import CloudifyClientError
+
+
+def get_deployment_environment_execution(client, deployment_id, workflow):
+
+    executions = client.executions.list(deployment_id=deployment_id)
+    for execution in executions:
+        if execution.workflow_id == workflow:
+            return execution
+
+    raise RuntimeError(
+        'Failed to get {0} workflow execution.'
+        ' Available executions: {1}'.format(workflow, executions)
+    )
 
 
 def dump_to_file(collection, file_path):
@@ -262,8 +276,8 @@ def generate_progress_handler(file_path, action='', max_bar_length=80):
 
         # The \r caret makes sure the cursor moves back to the beginning of
         # the line
-        sys.stdout.write('\r{0} {1} |{2}| {3}%'.format(
-            action, file_name, bar, percents))
+        msg = '\r{0} {1} |{2}| {3}%'.format(action, file_name, bar, percents)
+        click.echo(msg, nl=False)
         if read_bytes >= total_bytes:
             sys.stdout.write('\n')
 

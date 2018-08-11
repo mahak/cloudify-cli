@@ -19,7 +19,7 @@ from .profiles import set_profile
 
 
 @cfy.group(name='ssl')
-@cfy.options.verbose()
+@cfy.options.common_options
 @cfy.assert_manager_active()
 def ssl():
     """Handle the manager's external ssl
@@ -29,7 +29,7 @@ def ssl():
 
 @ssl.command(name='status', short_help='Show SSL status')
 @cfy.assert_manager_active()
-@cfy.options.verbose()
+@cfy.options.common_options
 @cfy.pass_client()
 @cfy.pass_logger
 def status(logger, client):
@@ -40,7 +40,7 @@ def status(logger, client):
 
 @ssl.command(name='enable', short_help='Enables SSL [manager only]')
 @cfy.assert_manager_active()
-@cfy.options.verbose()
+@cfy.options.common_options
 @cfy.pass_client()
 @cfy.pass_logger
 def enable(logger, client):
@@ -54,7 +54,7 @@ def enable(logger, client):
                 ssh_user=None,
                 ssh_key=None,
                 ssh_port=None,
-                ssl='on',
+                ssl=True,
                 rest_certificate=None,
                 skip_credentials_validation=True,
                 logger=logger)
@@ -65,7 +65,7 @@ def enable(logger, client):
 
 @ssl.command(name='disable', short_help='Disable SSL [manager only]')
 @cfy.assert_manager_active()
-@cfy.options.verbose()
+@cfy.options.common_options
 @cfy.pass_client()
 @cfy.pass_logger
 def disable(logger, client):
@@ -79,7 +79,7 @@ def disable(logger, client):
                 ssh_user=None,
                 ssh_key=None,
                 ssh_port=None,
-                ssl='off',
+                ssl=False,
                 rest_certificate=None,
                 skip_credentials_validation=True,
                 logger=logger)

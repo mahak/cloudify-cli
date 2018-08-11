@@ -16,6 +16,7 @@
 
 VERBOSE = \
     "Show verbose output. You can supply this up to three times (i.e. -vvv)"
+QUIET = "Show only critical logs"
 VERSION = (
     "Display the version and exit (if a manager is used, its version will "
     "also show)"
@@ -24,7 +25,7 @@ VERSION = (
 INPUTS_PARAMS_USAGE = (
     '(Can be provided as wildcard based paths '
     '(*.yaml, /my_inputs/, etc..) to YAML files, a JSON string or as '
-    'key1=value1;key2=value2). This argument can be used multiple times'
+    '\'key1=value1;key2=value2\'). This argument can be used multiple times'
 )
 WORKFLOW_TO_EXECUTE = "The workflow to execute [default: {0}]"
 
@@ -282,3 +283,6 @@ STOP_OLD_AGENT = 'If set, after installing the new agent the old agent ' \
                  '(that is connected to the old Cloudify Manager) will be ' \
                  'stopped. *IMPORTANT* if the deployment has monitoring ' \
                  'with auto-healing configured, you need to disable it first'
+IGNORE_PLUGIN_FAILURE = 'if set, plugin installation errors during snapshot ' \
+                        'restore will only be logged as warnings, and will ' \
+                        'not fail the snapshot restore workflow'

@@ -23,10 +23,10 @@ class ProfilesTest(CliCommandTest):
     def test_get_active_profile(self):
         self.use_manager()
         outcome = self.invoke('profiles show-current')
-        self.assertIn('manager_ip', outcome.logs)
-        self.assertIn('10.10.1.10', outcome.logs)
-        self.assertIn('rest_port', outcome.logs)
-        self.assertIn('80', outcome.logs)
+        self.assertIn('manager_ip', outcome.output)
+        self.assertIn('10.10.1.10', outcome.output)
+        self.assertIn('rest_port', outcome.output)
+        self.assertIn('80', outcome.output)
 
     def test_get_profile(self):
         self.use_manager()
@@ -41,10 +41,10 @@ class ProfilesTest(CliCommandTest):
     def test_list_profiles(self):
         self.use_manager()
         outcome = self.invoke('profiles list')
-        self.assertIn('manager_ip', outcome.logs)
-        self.assertIn('*10.10.1.10', outcome.logs)
-        self.assertIn('rest_port', outcome.logs)
-        self.assertIn('80', outcome.logs)
+        self.assertIn('manager_ip', outcome.output)
+        self.assertIn('*10.10.1.10', outcome.output)
+        self.assertIn('rest_port', outcome.output)
+        self.assertIn('80', outcome.output)
 
     def test_list_profiles_no_profiles(self):
         outcome = self.invoke('profiles list')
@@ -295,7 +295,8 @@ class ProfilesTest(CliCommandTest):
         self.use_manager()
         self.invoke('profiles set -u 0 -p 0 -t 0 -c 0')
 
-        validate_credentials_mock.assert_called_once_with('0', '0', '0', '0')
+        validate_credentials_mock.assert_called_once_with('0', '0', '0', '0',
+                                                          None, None)
         self.assertEquals('0', env.profile.manager_username)
         self.assertEquals('0', env.profile.manager_password)
         self.assertEquals('0', env.profile.manager_tenant)
