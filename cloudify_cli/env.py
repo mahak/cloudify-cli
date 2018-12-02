@@ -121,14 +121,15 @@ def assert_credentials_set():
                 'You can set it in the profile by running ' \
                 '`cfy profiles set {1}`, or you can set the `CLOUDIFY_{2}` ' \
                 'environment variable.'
-    if not get_username():
-        raise CloudifyCliError(
-            error_msg.format('Username', '--manager-username', 'USERNAME')
-        )
-    if not get_password():
-        raise CloudifyCliError(
-            error_msg.format('Password', '--manager-password', 'PASSWORD')
-        )
+    if not get_kerberos_env():
+        if not get_username():
+            raise CloudifyCliError(
+                error_msg.format('Username', '--manager-username', 'USERNAME')
+            )
+        if not get_password():
+            raise CloudifyCliError(
+                error_msg.format('Password', '--manager-password', 'PASSWORD')
+            )
     if not get_tenant_name():
         raise CloudifyCliError(
             error_msg.format('Tenant', '--manager-tenant', 'TENANT')
@@ -150,19 +151,26 @@ def is_manager_active():
 
 
 def get_profile_context(profile_name=None, suppress_error=False):
+    # empty profile with nothing but default values
+    default = ProfileContext()
     profile_name = profile_name or get_active_profile()
     if profile_name == 'local':
         if suppress_error:
-            return ProfileContext()
+            return default
         raise CloudifyCliError('Local profile does not have context')
     try:
         path = get_context_path(profile_name)
         with open(path) as f:
-            return yaml.load(f.read())
+            context = yaml.load(f.read())
+        # fill the default with values from existing profile (the default is
+        # used as base because some of the attributes may not be in the
+        # existing profile file)
+        for key, value in context.__dict__.items():
+            setattr(default, key, value)
     except CloudifyCliError:
-        if suppress_error:
-            return ProfileContext()
-        raise
+        if not suppress_error:
+            raise
+    return default
 
 
 def is_initialized(profile_name=None):
@@ -217,7 +225,8 @@ def get_rest_client(client_profile=None,
                     tenant_name=None,
                     trust_all=False,
                     skip_version_check=False,
-                    cluster=None):
+                    cluster=None,
+                    kerberos_env=None):
     if client_profile is None:
         client_profile = profile
     rest_host = rest_host or client_profile.manager_ip
@@ -231,31 +240,33 @@ def get_rest_client(client_profile=None,
     headers = get_auth_header(username, password)
     headers[constants.CLOUDIFY_TENANT_HEADER] = tenant_name
     cluster = cluster or client_profile.cluster
+    kerberos_env = kerberos_env \
+        if kerberos_env is not None else client_profile.kerberos_env
 
-    if not is_kerberos_env():
+    if kerberos_env is False \
+            or (kerberos_env is None and not is_kerberos_env()):
         if not username:
             raise CloudifyCliError('Command failed: Missing Username')
         if not password:
             raise CloudifyCliError('Command failed: Missing password')
 
     if cluster:
-        client = CloudifyClusterClient(
-            host=rest_host,
-            port=rest_port,
-            protocol=rest_protocol,
-            headers=headers,
-            cert=rest_cert,
-            trust_all=trust_all,
-            profile=client_profile)
-
+        client = CloudifyClusterClient(host=rest_host,
+                                       port=rest_port,
+                                       protocol=rest_protocol,
+                                       headers=headers,
+                                       cert=rest_cert,
+                                       trust_all=trust_all,
+                                       profile=client_profile,
+                                       kerberos_env=kerberos_env)
     else:
-        client = CloudifyClient(
-            host=rest_host,
-            port=rest_port,
-            protocol=rest_protocol,
-            headers=headers,
-            cert=rest_cert,
-            trust_all=trust_all)
+        client = CloudifyClient(host=rest_host,
+                                port=rest_port,
+                                protocol=rest_protocol,
+                                headers=headers,
+                                cert=rest_cert,
+                                trust_all=trust_all,
+                                kerberos_env=kerberos_env)
 
     # TODO: Put back version check after we've solved the problem where
     # a new CLI is used with an older manager on `cfy upgrade`.
@@ -326,6 +337,12 @@ def get_tenant_name(from_profile=None):
                                'Either unset the env variable, or run '
                                '`cfy profiles unset --manager-tenant`')
     return tenant or from_profile.manager_tenant
+
+
+def get_kerberos_env(from_profile=None):
+    if from_profile is None:
+        from_profile = profile
+    return from_profile.kerberos_env
 
 
 def get_ssl_cert(from_profile=None):
@@ -412,6 +429,7 @@ class ProfileContext(yaml.YAMLObject):
         self.rest_port = constants.DEFAULT_REST_PORT
         self.rest_protocol = constants.DEFAULT_REST_PROTOCOL
         self.rest_certificate = None
+        self.kerberos_env = False
         self._cluster = []
 
     def to_dict(self):
@@ -427,6 +445,7 @@ class ProfileContext(yaml.YAMLObject):
             rest_port=self.rest_port,
             rest_protocol=self.rest_protocol,
             rest_certificate=self.rest_certificate,
+            kerberos_env=self.kerberos_env,
             cluster=self.cluster
         )
 

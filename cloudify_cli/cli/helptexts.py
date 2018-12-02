@@ -146,6 +146,11 @@ FORCE_DELETE_PLUGIN = (
     "using it"
 )
 
+FORCE_DELETE_BLUEPRINT = (
+    "Delete the blueprint even if there are deployments which are currently "
+    "using it"
+)
+
 FORCE_TEARDOWN = "This is mandatory for performing the teardown"
 
 IGNORE_DEPLOYMENTS = \
@@ -172,6 +177,7 @@ REST_PORT = "The REST server's port"
 SSL_REST = "Connect to REST server using SSL"
 REST_CERT = "The REST server's external certificate file location (implies " \
     "--ssl)"
+KERBEROS_ENV = "Whether or not to use kerberos while connecting to the manager"
 
 EXPORT_SSH_KEYS = 'Include ssh key files in archive'
 IMPORT_SSH_KEYS = 'WARNING: Import exported keys to their original locations'
@@ -186,6 +192,7 @@ TENANT_TEMPLATE = 'The name of the tenant of the {0}'
 TENANT_LIST_TEMPLATE = 'The name of the tenant to list {0}s from'
 ALL_TENANTS = 'Include resources from all tenants associated with the user. ' \
               'You cannot use this argument with arguments: [tenant_name]'
+ALL_EXECUTIONS = 'Apply to all available executions'
 GROUP = 'The name of the user group'
 GROUP_DN = 'The ldap group\'s distinguished name. This option is required ' \
            'when using ldap'
@@ -283,6 +290,23 @@ STOP_OLD_AGENT = 'If set, after installing the new agent the old agent ' \
                  '(that is connected to the old Cloudify Manager) will be ' \
                  'stopped. *IMPORTANT* if the deployment has monitoring ' \
                  'with auto-healing configured, you need to disable it first'
-IGNORE_PLUGIN_FAILURE = 'if set, plugin installation errors during snapshot ' \
+IGNORE_PLUGIN_FAILURE = 'If set, plugin installation errors during snapshot ' \
                         'restore will only be logged as warnings, and will ' \
                         'not fail the snapshot restore workflow'
+QUEUE_SNAPSHOTS = 'If set, snapshot-creation-workflows that can`t currently ' \
+                  'run will be queued and run automatically when possible'
+QUEUE_EXECUTIONS = 'If set, executions that can`t currently run will be '\
+                   'queued and run automatically when possible'
+
+_MULTIPLE_TIMES_FRAGMENT = ' (can be passed multiple times, ' \
+                           'or comma-separated)'
+AGENT_NODE_INSTANCE_ID = 'The node instance id to be used for filtering ' \
+                         + _MULTIPLE_TIMES_FRAGMENT
+AGENT_NODE_ID = 'The node id to filter to be used for filtering' \
+                + _MULTIPLE_TIMES_FRAGMENT
+AGENT_INSTALL_METHOD = 'Only show agents installed with this install_method' \
+                       + _MULTIPLE_TIMES_FRAGMENT
+AGENT_DEPLOYMENT_ID = DEPLOYMENT_ID + _MULTIPLE_TIMES_FRAGMENT
+
+WAIT_AFTER_FAIL = 'When a task fails, wait this many seconds for ' \
+                  'already-running tasks to return'

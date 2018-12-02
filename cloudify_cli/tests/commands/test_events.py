@@ -37,6 +37,8 @@ class EventsTest(CliCommandTest):
                 'deployment_id': deployment_id,
                 'execution_id': '<execution_id>',
                 'node_instance_id': '<node_instance_id>',
+                'source_id': None,
+                'target_id': None,
                 'node_name': '<node_name>',
                 'operation': '<operation>',
                 'workflow_id': '<workflow_id>',
@@ -56,6 +58,8 @@ class EventsTest(CliCommandTest):
             'node_instance_id': '<node_instance_id>',
             'node_name': '<node_name>',
             'operation': '<operation>',
+            'source_id': None,
+            'target_id': None,
             'workflow_id': '<workflow_id>',
             'type': 'cloudify_event',
             'message': '<message>',
@@ -173,7 +177,7 @@ class EventsTest(CliCommandTest):
     def _test_events(self, flag=''):
         self.client.executions.get = self._mock_executions_get
         self.client.events.list = self._mock_events_list
-        outcome = self.invoke('cfy events list -e execution-id {0}'.format(
+        outcome = self.invoke('cfy events list execution-id {0}'.format(
             flag))
         if flag == '--json-output':
             return outcome.output

@@ -530,6 +530,13 @@ class Options(object):
             help=helptexts.ALL_TENANTS,
         )
 
+        self.all_executions = click.option(
+            '--all-executions',
+            is_flag=True,
+            default=False,
+            help=helptexts.ALL_EXECUTIONS,
+        )
+
         self.search = click.option(
             '--search',
             default=None,
@@ -691,6 +698,19 @@ class Options(object):
             is_flag=True,
             default=False,
             help=helptexts.REST_CERT)
+
+        self.kerberos_env = click.option(
+            '--kerberos-env',
+            required=False,
+            help=helptexts.KERBEROS_ENV
+        )
+
+        self.kerberos_env_flag = click.option(
+            '--kerberos-env',
+            required=False,
+            is_flag=True,
+            default=False,
+            help=helptexts.KERBEROS_ENV)
 
         self.ssl_state = click.option(
             '--ssl',
@@ -986,6 +1006,29 @@ class Options(object):
             help=helptexts.IGNORE_PLUGIN_FAILURE
         )
 
+        self.queue = click.option(
+            '--queue',
+            is_flag=True,
+            default=False,
+            cls=MutuallyExclusiveOption,
+            mutually_exclusive=['dry_run', 'force'],
+            help=helptexts.QUEUE_EXECUTIONS
+        )
+
+        self.queue_snapshot = click.option(
+            '--queue',
+            is_flag=True,
+            default=False,
+            help=helptexts.QUEUE_SNAPSHOTS
+        )
+
+        self.wait_after_fail = click.option(
+            '--wait-after-fail',
+            default=600,
+            type=int,
+            help=helptexts.WAIT_AFTER_FAIL
+        )
+
     def common_options(self, f):
         """A shorthand for applying commonly used arguments.
 
@@ -993,6 +1036,56 @@ class Options(object):
         almost all commands.
         """
         for arg in [self.json, self.verbose(), self.format, self.quiet()]:
+            f = arg(f)
+        return f
+
+    def parse_comma_separated(self, ctx, param, value):
+        """Callback for parsing multiple comma-separated arguments.
+
+        This is for use with `--opt a --opt b,c` -> ['a', 'b', 'c']
+        """
+        if not value:
+            return []
+        return sum((part.split(',') for part in value), [])
+
+    def agent_filters(self, f):
+        """Set of filter arguments for commands working with a list of agents
+
+        Applies deployment id, node id and node instance id filters.
+        """
+        node_instance_id = click.option('--node-instance-id', multiple=True,
+                                        help=helptexts.AGENT_NODE_INSTANCE_ID,
+                                        callback=self.parse_comma_separated)
+        node_id = click.option('--node-id', multiple=True,
+                               help=helptexts.AGENT_NODE_ID,
+                               callback=self.parse_comma_separated)
+        install_method = click.option('--install-method', multiple=True,
+                                      help=helptexts.AGENT_INSTALL_METHOD,
+                                      callback=self.parse_comma_separated)
+        deployment_id = click.option('--deployment-id', multiple=True,
+                                     help=helptexts.AGENT_DEPLOYMENT_ID,
+                                     callback=self.parse_comma_separated)
+
+        # we add separate --node-instance-id, --node-id and --deployment-id
+        # arguments, but only expose a agents_filter = {'node_id': ..} dict
+        # to the decorated function
+        def _filters_deco(f):
+            @wraps(f)
+            def _inner(*args, **kwargs):
+                filters = {}
+                for arg_name, filter_name in [
+                        ('node_id', 'node_ids'),
+                        ('node_instance_id', 'node_instance_ids'),
+                        ('deployment_id', 'deployment_id'),
+                        ('install_method', 'install_methods')]:
+                    filters[filter_name] = \
+                        kwargs.pop(arg_name, None)
+                kwargs['agent_filters'] = filters
+                return f(*args, **kwargs)
+            return _inner
+
+        for arg in [install_method, node_instance_id, node_id,
+                    deployment_id, _filters_deco]:
             f = arg(f)
         return f
 
@@ -1210,10 +1303,11 @@ class Options(object):
             callback=_get_validate_callback(validate))
 
     @staticmethod
-    def execution_id(required=False):
+    def execution_id(required=False, dest=None):
         return click.option(
             '-e',
             '--execution-id',
+            dest,
             required=required,
             help=helptexts.EXECUTION_ID)
 

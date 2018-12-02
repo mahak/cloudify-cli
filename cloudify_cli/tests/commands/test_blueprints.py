@@ -1,3 +1,19 @@
+########
+# Copyright (c) 2018 Cloudify Platform Ltd. All rights reserved
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+############
+
 import os
 import json
 import yaml
@@ -63,6 +79,14 @@ class BlueprintsTest(CliCommandTest):
     def test_blueprints_delete(self):
         self.client.blueprints.delete = MagicMock()
         self.invoke('blueprints delete a-blueprint-id')
+
+    def test_blueprints_delete_force(self):
+        for flag in ['--force', '-f']:
+            mock = Mock()
+            self.client.blueprints.delete = mock
+            self.invoke('blueprints delete a-blueprint-id {0}'.format(
+                flag))
+            mock.assert_called_once_with('a-blueprint-id', True)
 
     def test_blueprints_delete_explicit_tenant(self):
         self.client.blueprints.delete = MagicMock()
@@ -209,11 +233,17 @@ class BlueprintsTest(CliCommandTest):
             .format(BLUEPRINTS_DIR),
             err_str_segment='Failed to validate blueprint')
 
-    def test_validate_plugin_repository(self):
+    def test_cannot_validate_plugin_repository(self):
         self.invoke(
             'cfy blueprints validate {0}/bad_blueprint/plugin_repo.yaml'
             .format(BLUEPRINTS_DIR),
-            err_str_segment='plugin repository')
+            err_str_segment='remote resource')
+
+    def test_cannot_validate_blueprints_catalog(self):
+        self.invoke(
+            'cfy blueprints validate {0}/bad_blueprint/blueprint_catalog.yaml'
+            .format(BLUEPRINTS_DIR),
+            err_str_segment='remote resource')
 
     def test_blueprint_inputs(self):
 
